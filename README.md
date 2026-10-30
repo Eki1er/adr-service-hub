@@ -1,6 +1,33 @@
 # ADR Service Hub pilot
 
-Version 0.19.0 (draft) is a local Home Assistant app for a single WattBox test device,
+
+## Update to 0.19.0
+
+In the app store, check for updates, open ADR Service Agent and install 0.19.0.
+Use the update backup option when offered. Reopen the Web UI after the update so
+it loads the new dashboard script. Existing saved connection settings are retained.
+
+- Background display updates preserve the selected category, expanded tiles and
+  scroll position. Checks still run every 20 minutes by default.
+- Internet results now come directly from the UniFi gateway. The old Speedtest.net
+  source is no longer used. Until configured, speed graphs show a setup message.
+- In app Configuration, set `unifi_gateway_host`, `unifi_gateway_api_key`, HTTPS
+  port (normally 443), site (`default`) and WAN (`WAN`). Create a local Network
+  API key; do not paste it into chat. Save and restart ADR Service Agent only.
+  Under Connections, inspect and independently verify the gateway certificate,
+  approve it, then run a check. Firmware compatibility needs a live check.
+- For Ruckus, use Read Access Points, compare the listed APs with the controller's
+  dashboard and use Verify AP status only when every listed AP is Online.
+- WattBox controls are off by default. Enable `allow_outlet_control` in Configuration
+  to expose On / Off / Restart actions. Each action confirms the fresh outlet name
+  and mapping. Off or Restart on network equipment can interrupt remote access.
+- Speed tests keep their six-hour schedule once configured. Speed history covers
+  seven days; gateway latency history covers 24 hours. Graphs fill with real samples.
+
+The versioned sections below describe earlier behavior. This 0.19.0 setup and the
+Dashboard changes section take precedence for refresh, speed tests and outlet controls.
+
+Version 0.19.0 is a local Home Assistant app for a single WattBox test device,
 read-only Sonos diagnostics, Ruckus integration/presence diagnostics and UniFi
 sensor diagnostics, Sense energy/voltage with existing HA history, and direct
 Araknis SSH login/help inspection.
@@ -582,7 +609,7 @@ visible viewport in the embedded app. Add observation and the Test Apple TV card
 are removed. Existing saved notes remain readable; WattBox identity approval
 remains under Connections.
 
-## Draft dashboard changes (0.19.0, not published)
+## Dashboard changes (0.19.0)
 
 Automatic display refresh now reads the page in the background rather than
 navigating. Existing details and category selections remain in place. Changed
@@ -627,5 +654,6 @@ Primary API references reviewed:
 - UniFi gateway source: https://github.com/biofects/HA-Unifi-Speedtest/blob/main/custom_components/ha_unifi_speedtest/api.py
 - WattBox protocol: https://www.snapav.com/wcsstore/ExtendedSitesCatalogAssetStore/attachments/documents/PowerManagement/SupportDocuments/SnapAV_Wattbox_API_V2.2.pdf
 
-This branch is a draft. Live gateway access, actual outlet switching and Ruckus
-status calibration were not performed from the development environment.
+Live gateway access, actual outlet switching and Ruckus status calibration require
+installation checks; they were not performed from the development environment.
+

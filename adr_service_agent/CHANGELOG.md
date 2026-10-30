@@ -1,4 +1,4 @@
-# 0.19.0 (draft, not published)
+# 0.19.0
 
 - Replace timed whole-page reloads with hash-authorized same-origin background
   GET updates. Preserve the selected category, existing expanded details and
@@ -17,7 +17,7 @@
   expansion, no background POSTs, failed-read retention and responsive layout.
 - Installation checks still required: local gateway API compatibility, a real
   gateway result and scheduling; Ruckus code verification; actual outlet controls.
-  No household power commands or live network tests were sent by this draft.
+  No household power commands or live network tests were sent during development.
 
 # 0.18.1
 
@@ -273,3 +273,4 @@
 - Initial experimental WattBox connector with ingress UI, SSH identity pinning,
   outlet inventory, confirmed single-outlet RESET, cooldown and power verification.
 - Hardware build and live integration testing remain pending.
+

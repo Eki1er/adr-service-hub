@@ -1,3 +1,33 @@
+# Current setup: 0.19.0
+
+## Update to 0.19.0
+
+In the app store, check for updates, open ADR Service Agent and install 0.19.0.
+Use the update backup option when offered. Reopen the Web UI after the update so
+it loads the new dashboard script. Existing saved connection settings are retained.
+
+- Background display updates preserve the selected category, expanded tiles and
+  scroll position. Checks still run every 20 minutes by default.
+- Internet results now come directly from the UniFi gateway. The old Speedtest.net
+  source is no longer used. Until configured, speed graphs show a setup message.
+- In app Configuration, set `unifi_gateway_host`, `unifi_gateway_api_key`, HTTPS
+  port (normally 443), site (`default`) and WAN (`WAN`). Create a local Network
+  API key; do not paste it into chat. Save and restart ADR Service Agent only.
+  Under Connections, inspect and independently verify the gateway certificate,
+  approve it, then run a check. Firmware compatibility needs a live check.
+- For Ruckus, use Read Access Points, compare the listed APs with the controller's
+  dashboard and use Verify AP status only when every listed AP is Online.
+- WattBox controls are off by default. Enable `allow_outlet_control` in Configuration
+  to expose On / Off / Restart actions. Each action confirms the fresh outlet name
+  and mapping. Off or Restart on network equipment can interrupt remote access.
+- Speed tests keep their six-hour schedule once configured. Speed history covers
+  seven days; gateway latency history covers 24 hours. Graphs fill with real samples.
+
+The versioned sections below describe earlier behavior. This 0.19.0 setup and the
+Dashboard changes section take precedence for refresh, speed tests and outlet controls.
+
+## Earlier setup and feature history
+
 # Setup
 
 Enter the WattBox's **local** SSH credentials under this app's Configuration.
@@ -358,3 +388,4 @@ any desired operating context once using this form. Do not enter credentials.
 Raw diagnostic reports and comparison baselines remain in memory and clear on
 restart; local historical annotations persist. Logs record annotation events
 without note text. No scheduled checks, device writes or new power actions are added.
+
