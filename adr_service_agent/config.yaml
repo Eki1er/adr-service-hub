@@ -1,5 +1,5 @@
 name: ADR Service Agent
-version: "0.19.0"
+version: "0.19.1"
 slug: adr_service_agent
 description: "Automatic monitoring, direct UniFi speed tests and history, network and AV diagnostics, Sense energy, and confirmed WattBox outlet controls."
 arch:

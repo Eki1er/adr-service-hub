@@ -1,3 +1,16 @@
+# 0.19.1
+
+- Automatically read WattBox outlet status after On / Off / Restart actions,
+  including an unconfirmed command response. Power commands are never retried.
+- On / Off checks run after 2, 5 and 15 seconds, stopping when the requested
+  state is observed. Restart checks run after 15, 30 and 60 seconds.
+- Refresh only the WattBox tile and its read timestamp; retain other systems
+  and the original combined-run timestamp. Report exports include the post-action
+  verification timestamp and expected/observed power state.
+- Keep background display updates active during verification and block further
+  outlet actions until it finishes. Failed reads retain an unverified marker.
+- Validation: 207 automated tests. Physical outlet verification requires a live check.
+
 # 0.19.0
 
 - Replace timed whole-page reloads with hash-authorized same-origin background

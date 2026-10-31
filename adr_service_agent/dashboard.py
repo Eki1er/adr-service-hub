@@ -138,7 +138,7 @@ def cards(report, names=SYSTEMS, outlet_controls=""):
         snapshot = (check or {}).get('snapshot') or {}
         lines = key_readings(name, snapshot) if check else []
         headline = tile_value(name, snapshot, lines) if check else 'Not checked yet'
-        stamp = display_time(check.get('completed_at')) if check else ''
+        stamp = display_time(check.get('post_action_verified_at') or check.get('completed_at')) if check else ''
         short_stamp = stamp.split('·')[-1].strip()
         output += '<article class="system-card ' + style + (' sense-card' if name == 'Sense' else '') + '"><details class="system-tile"><summary class="tile-summary" aria-label="' + esc(name + ' readings: ' + short_label) + '">'
         output += '<div class="tile-icon-row"><span class="system-icon">' + icon(SYSTEM_ICONS[name]) + '</span><span class="status-dot" aria-hidden="true"></span></div><h3>' + esc(name) + '</h3><span class="badge" aria-label="' + esc(label) + '">' + short_label + '</span>'
@@ -196,3 +196,4 @@ def grouped_cards(report, outlet_controls=""):
         if key == 'network': output += network_panels(checks)
         output += cards(report, names, outlet_controls=outlet_controls) + '</div>'
     return output + '</div>'
+

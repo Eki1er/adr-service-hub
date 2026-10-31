@@ -959,11 +959,11 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         return (f'<form method="post" action="{action}"><input type="hidden" name="csrf" value="{pilot.csrf}">'
             + extra + f'<button class="{"danger" if danger else ""}"{" disabled" if disabled else ""}>{esc(label)}</button></form>')
     text = '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    if (pilot.service_running or pilot.internet_test_running or pilot.controller_running) and not pilot.power_pending and not pilot.gateway_candidate:
+    if (pilot.service_running or pilot.internet_test_running or pilot.controller_running or pilot.active) and not pilot.power_pending and not pilot.gateway_candidate:
         text += '<meta name="adr-refresh" content="3">'
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.19.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.19.1</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.service_report
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1023,12 +1023,12 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         wb_check = next((c for c in (report or {}).get('checks', []) if c.get('system')=='WattBox'), {})
         wb_snapshot = wb_check.get('snapshot') or {}
         if wb_snapshot.get('power_action_pending_read'):
-            outlet_markup += '<p class="measurement-warning">Power action accepted. Read outlets again for current power states.</p>'
+            outlet_markup += '<p class="measurement-warning">' + ('Checking outlet power…' if pilot.active else 'Outlet power remains unverified. Run All Checks.') + '</p>'
         for outlet in wb_snapshot.get('outlets', []):
             if type(outlet.get('number')) is not int or not 1<=outlet['number']<=18: continue
             outlet_markup += '<div class="outlet-row"><div><strong>' + str(outlet['number']) + ' · ' + esc(outlet.get('label','Outlet')) + '</strong><small>' + ('Awaiting read' if wb_snapshot.get('power_action_pending_read') else 'On' if outlet.get('on') is True else 'Off' if outlet.get('on') is False else 'Unknown') + '</small></div><div class="outlet-actions">'
             for action, label in (('ON','On'),('OFF','Off'),('RESET','Restart')):
-                outlet_markup += form('outlet-prepare', label, '<input type="hidden" name="outlet" value="' + str(outlet['number']) + '"><input type="hidden" name="operation" value="' + action + '">', danger=action!='ON', disabled=pilot.araknis_options.get('allow_outlet_control') is not True)
+                outlet_markup += form('outlet-prepare', label, '<input type="hidden" name="outlet" value="' + str(outlet['number']) + '"><input type="hidden" name="operation" value="' + action + '">', danger=action!='ON', disabled=pilot.active or pilot.araknis_options.get('allow_outlet_control') is not True)
             outlet_markup += '</div></div>'
         if pilot.araknis_options.get('allow_outlet_control') is not True:
             outlet_markup += '<p class="report-caption">Enable allow_outlet_control in Configuration to use outlet controls.</p>'
@@ -1730,7 +1730,7 @@ def main():
     server = ThreadingHTTPServer(('0.0.0.0', 8099), Handler)
     server.pilot = Pilot('/data', '/data/options.json')
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.19.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.19.1 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:
@@ -1740,3 +1740,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

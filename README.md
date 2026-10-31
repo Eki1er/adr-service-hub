@@ -1,5 +1,15 @@
 # ADR Service Hub pilot
 
+## Current release: 0.19.1
+
+WattBox actions now trigger automatic status verification and update the tile.
+On / Off checks run at 2, 5 and 15 seconds, stopping when the expected state is
+observed. Restart checks run at 15, 30 and 60 seconds. An ambiguous command
+response also triggers status reads, never another power command. Failed reads
+remain unverified. The original combined-run time is preserved; the WattBox tile
+and exported post-action metadata show the verification time. Existing 0.19.0
+connection settings apply. Validation: 207 automated tests; live check pending.
+
 
 ## Update to 0.19.0
 

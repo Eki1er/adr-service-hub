@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'adr_service_agent'))
 from agent import Pilot, atomic_json, page, VIEW_SCRIPT, VIEW_SCRIPT_HASH
-from outlet_control import prepare, execute
+from outlet_control import prepare, execute, verify_power
 from wattbox import WattBox, ProtocolError
 import unifi_gateway as gateway
 from network_history import append
@@ -27,6 +27,7 @@ class DraftControls(unittest.TestCase):
         self.inventory={'model':'WB-800VPS-IPVM-18','firmware':'test','outlets':[{'number':1,'label':'TV','on':True}]}
         self.box=Mock();self.box.__enter__=Mock(return_value=self.box);self.box.__exit__=Mock(return_value=False);self.box.inventory.side_effect=lambda:copy.deepcopy(self.inventory)
         self.pilot=Pilot(self.root,self.options,lambda *_:self.box)
+        worker=patch('outlet_control.threading.Thread');self.worker=worker.start();self.addCleanup(worker.stop)
 
     def test_named_confirmation_single_command_and_replay_blocked(self):
         item=prepare(self.pilot,1,'OFF');self.box.set_power.assert_not_called()
@@ -36,6 +37,84 @@ class DraftControls(unittest.TestCase):
         self.assertEqual((self.root/'outlet_control_state.json').stat().st_mode&0o777,0o600)
         with self.assertRaises(ProtocolError):execute(self.pilot,item['nonce'],True,atomic_json)
         self.assertEqual(self.box.set_power.call_count,1)
+
+    def verification_report(self):
+        self.pilot.service_report={'completed_at':'original-run','counts':{'verified':2,'review':0,'unverified':0},'checks':[
+            {'system':'WattBox','status':'verified','completed_at':'original-read','snapshot':copy.deepcopy(self.inventory)},
+            {'system':'UniFi','status':'verified','snapshot':{'state':'connected'}}]}
+        return copy.deepcopy(self.pilot.service_report['checks'][1])
+
+    def test_off_action_schedules_read_and_updates_only_wattbox(self):
+        other=self.verification_report()
+        item=prepare(self.pilot,1,'OFF');execute(self.pilot,item['nonce'],True,atomic_json)
+        self.assertTrue(self.pilot.active)
+        self.assertTrue(self.pilot.service_report['checks'][0]['snapshot']['power_action_pending_read'])
+        self.assertIn('<meta name="adr-refresh" content="3">',page(self.pilot))
+        self.worker.assert_called_once()
+        with self.assertRaises(ProtocolError):prepare(self.pilot,1,'ON')
+        self.inventory['outlets'][0]['on']=False
+        waits=[];verify_power(self.pilot,item,waits.append)
+        self.assertEqual(waits,[2]);self.assertFalse(self.pilot.active)
+        check=self.pilot.service_report['checks'][0]
+        self.assertFalse(check['snapshot']['outlets'][0]['on'])
+        self.assertNotIn('power_action_pending_read',check['snapshot'])
+        self.assertEqual(check['completed_at'],'original-read')
+        self.assertIn('post_action_verified_at',check)
+        self.assertEqual(self.pilot.service_report['completed_at'],'original-run')
+        self.assertEqual(self.pilot.service_report['checks'][1],other)
+        self.assertIn('reports Off',self.pilot.result)
+        self.box.set_power.assert_called_once_with(1,'OFF')
+
+    def test_restart_reads_at_15_30_60_without_resending(self):
+        self.verification_report()
+        item=prepare(self.pilot,1,'RESET');execute(self.pilot,item['nonce'],True,atomic_json)
+        waits=[];verify_power(self.pilot,item,waits.append)
+        self.assertEqual(waits,[15,15,30]);self.assertFalse(self.pilot.active)
+        self.assertIn('does not confirm equipment recovery',self.pilot.result)
+        self.box.set_power.assert_called_once_with(1,'RESET')
+        self.assertEqual(self.box.inventory.call_count,5)
+
+    def test_timeout_still_schedules_reads_never_repeats_power(self):
+        self.verification_report()
+        item=prepare(self.pilot,1,'OFF');self.box.set_power.side_effect=TimeoutError('private response')
+        with self.assertRaises(TimeoutError):execute(self.pilot,item['nonce'],True,atomic_json)
+        self.assertTrue(self.pilot.active);self.worker.assert_called_once()
+        self.inventory['outlets'][0]['on']=False
+        verify_power(self.pilot,item,lambda _:None)
+        self.assertIn('reports Off',self.pilot.result)
+        self.box.set_power.assert_called_once_with(1,'OFF')
+
+    def test_failed_reads_leave_stale_marker_and_release_busy(self):
+        self.verification_report()
+        item=prepare(self.pilot,1,'RESET');execute(self.pilot,item['nonce'],True,atomic_json)
+        self.box.inventory.side_effect=TimeoutError('private response')
+        verify_power(self.pilot,item,lambda _:None)
+        self.assertFalse(self.pilot.active);self.assertIsNone(self.pilot.inventory)
+        self.assertTrue(self.pilot.service_report['checks'][0]['snapshot']['power_action_pending_read'])
+        self.assertNotIn('private response',self.pilot.result)
+        self.box.set_power.assert_called_once_with(1,'RESET')
+
+    def test_verification_checks_target_and_mapping(self):
+        for change in ('key','label'):
+            with self.subTest(change=change):
+                self.setUp();self.verification_report()
+                item=prepare(self.pilot,1,'ON');execute(self.pilot,item['nonce'],True,atomic_json)
+                if change=='key':(self.root/'known_hosts').write_text('different-key')
+                else:self.inventory['outlets'][0]['label']='Router'
+                verify_power(self.pilot,item,lambda _:None)
+                self.assertTrue(self.pilot.service_report['checks'][0]['snapshot']['power_action_pending_read'])
+                self.assertNotIn('post_action_verified_at',self.pilot.service_report['checks'][0])
+                self.assertFalse(self.pilot.active)
+                self.box.set_power.assert_called_once_with(1,'ON')
+
+    def test_mismatched_state_is_shown_without_power_retry(self):
+        self.verification_report()
+        item=prepare(self.pilot,1,'OFF');execute(self.pilot,item['nonce'],True,atomic_json)
+        waits=[];verify_power(self.pilot,item,waits.append)
+        self.assertEqual(waits,[2,3,10])
+        self.assertIn('reports On. Expected Off.',self.pilot.result)
+        self.assertTrue(self.pilot.service_report['checks'][0]['post_action_verification']['observed_on'])
+        self.box.set_power.assert_called_once_with(1,'OFF')
 
     def test_mapping_state_host_or_key_change_never_sends(self):
         for change in ('label','on','host','key'):
@@ -59,6 +138,8 @@ class DraftControls(unittest.TestCase):
     def test_timeout_is_single_attempt_and_cooldown_persists(self):
         item=prepare(self.pilot,1,'RESET');self.box.set_power.side_effect=TimeoutError()
         with self.assertRaises(TimeoutError):execute(self.pilot,item['nonce'],True,atomic_json)
+        self.assertTrue(self.pilot.active)
+        self.pilot.active=False
         second=prepare(self.pilot,1,'RESET')
         with self.assertRaises(ProtocolError):execute(self.pilot,second['nonce'],True,atomic_json)
         self.assertEqual(self.box.set_power.call_count,1)
@@ -153,3 +234,4 @@ class GatewayTests(unittest.TestCase):
         append(store,'one',rows);append(store,'one',rows)
         self.assertEqual(len(store['one'][rows[0]['name']]['points']),1)
         append(store,'two',rows);self.assertNotIn('one',store)
+

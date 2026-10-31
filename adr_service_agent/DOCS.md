@@ -1,3 +1,13 @@
+# Outlet status verification: 0.19.1
+
+After an On or Off action the app automatically reads WattBox at 2, 5 and 15
+seconds, stopping when the requested state is observed. Restart reads occur at
+15, 30 and 60 seconds. These are read-only status checks, including after an
+ambiguous power-command response; the action is never repeated automatically.
+The WattBox tile updates with the new state and read time. Other systems and the
+original combined-run timestamp remain unchanged. A failed read leaves power
+unverified. An On reading does not confirm connected equipment has recovered.
+
 # Current setup: 0.19.0
 
 ## Update to 0.19.0

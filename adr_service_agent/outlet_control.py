@@ -3,6 +3,8 @@ import hashlib
 import json
 import secrets
 import time
+import threading
+from service_report import assess, now
 from pathlib import Path
 from wattbox import ProtocolError
 
@@ -66,11 +68,81 @@ def execute(pilot, nonce, confirmed, save_fn):
         if pilot.service_report:
             for check in pilot.service_report.get('checks', []):
                 if check.get('system')=='WattBox':check.setdefault('snapshot',{})['power_action_pending_read']=True
-        box.set_power(item['number'],item['action'])
-    pilot.inventory=None
-    pilot.result='WattBox accepted '+item['action']+' for outlet '+str(item['number'])+' ('+item['label']+'). Updated power state awaits the next read.'
-    # The old combined inventory is explicitly marked stale until a new read.
-    if pilot.service_report:
-        for check in pilot.service_report.get('checks',[]):
-            if check.get('system')=='WattBox':
-                check.setdefault('snapshot',{})['power_action_pending_read']=True
+        try:
+            box.set_power(item['number'],item['action'])
+        except Exception:
+            start_verification(pilot, item, acknowledged=False)
+            raise
+    start_verification(pilot, item, acknowledged=True)
+
+
+def start_verification(pilot, item, acknowledged):
+    pilot.inventory = None
+    pilot.confirmations.clear()
+    pilot.active = True
+    prefix = 'WattBox accepted the action.' if acknowledged else 'Outlet action acknowledgement is unverified.'
+    pilot.result = prefix + ' Checking outlet power automatically.'
+    try:
+        threading.Thread(target=verify_power, args=(pilot, dict(item)), daemon=True).start()
+    except Exception:
+        pilot.active = False
+        pilot.result = prefix + ' Automatic status check could not start. Run All Checks.'
+
+
+def verify_power(pilot, item, wait_fn=time.sleep):
+    """Read only: never repeat the power command, including after a timeout."""
+    delays = ((15,15),(15,30),(30,60)) if item['action']=='RESET' else ((2,2),(3,5),(10,15))
+    expected = item['action'] != 'OFF'
+    try:
+        for delay, elapsed in delays:
+            wait_fn(delay)
+            with pilot.lock:
+                try:
+                    if identity(pilot) != item['target']:
+                        raise ProtocolError('Target changed.')
+                    with pilot.box() as box:
+                        inventory = box.inventory()
+                    outlets = inventory['outlets']
+                    actual = outlets[item['number']-1]
+                    if (inventory['model'] != item['model'] or len(outlets) != item['count']
+                        or actual['number'] != item['number'] or actual['label'] != item['label']
+                        or type(actual['on']) is not bool):
+                        raise ProtocolError('Outlet mapping changed.')
+                    stamp = now()
+                    pilot.inventory = inventory
+                    # Refresh only WattBox; preserve other systems and original run times.
+                    if pilot.service_report:
+                        for check in pilot.service_report.get('checks', []):
+                            if check.get('system') == 'WattBox':
+                                check['snapshot'] = inventory
+                                check['post_action_verified_at'] = stamp
+                                check['post_action_verification'] = {
+                                    'outlet': item['number'], 'action': item['action'],
+                                    'expected_on': expected, 'observed_on': actual['on'],
+                                    'checked_at': stamp}
+                                assessment = assess('WattBox', inventory)
+                                check.update(assessment)
+                                check['findings'] = (assessment['observations'] + assessment['service_findings']
+                                    + assessment['data_limitations'])
+                        pilot.service_report['last_refreshed_at'] = stamp
+                    state = 'On' if actual['on'] else 'Off'
+                    pilot.result = 'Outlet ' + str(item['number']) + ' (' + item['label'] + ') reports ' + state + '.'
+                    if actual['on'] != expected:
+                        pilot.result += ' Expected ' + ('On.' if expected else 'Off.')
+                    if item['action']=='RESET':
+                        pilot.result += ' Outlet power does not confirm equipment recovery.'
+                    pilot.audit('outlet_power_observed', str(item['number'])+' '+state+' '+str(elapsed)+'s')
+                    if item['action']!='RESET' and actual['on']==expected:
+                        break
+                except Exception:
+                    pilot.inventory = None
+                    if pilot.service_report:
+                        for check in pilot.service_report.get('checks', []):
+                            if check.get('system')=='WattBox':
+                                check.setdefault('snapshot', {})['power_action_pending_read'] = True
+                    pilot.result = 'Outlet power could not be verified. No power command was repeated.'
+                    pilot.audit('outlet_power_read_failed', str(item['number'])+' '+str(elapsed)+'s')
+    finally:
+        with pilot.lock:
+            pilot.active = False
+

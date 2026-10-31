@@ -384,8 +384,9 @@ def report_payload(result, password):
         if isinstance(value, dict):
             return {key: clean(item) for key, item in value.items()}
         return value
-    return {'format': 'adr-araknis-discovery-v1', 'agent_version': '0.19.0',
+    return {'format': 'adr-araknis-discovery-v1', 'agent_version': '0.19.1',
         'read_only': True, 'snapshot': clean(result),
         'limitations': ['Command syntax and raw values are reported, not a health verdict.',
             'No running configuration, app options, credentials or SSH keys are included.',
             'Switch responses can include network addresses, device names and identifiers.']}
+
