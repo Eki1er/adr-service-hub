@@ -37,7 +37,7 @@ from araknis import settings as araknis_settings, inspect as inspect_araknis, sn
 
 
 # Fixed, hash-authorized presentation code; background GETs never initiate device actions.
-VIEW_SCRIPT = Path(__file__).with_name('dashboard_live.js').read_text()
+VIEW_SCRIPT = Path(__file__).with_name('dashboard_live.js').read_text() + '\n' + Path(__file__).with_name('voice_ui.js').read_text()
 VIEW_SCRIPT_HASH = base64.b64encode(hashlib.sha256(VIEW_SCRIPT.encode()).digest()).decode()
 
 def datetime_from_iso(value):
@@ -973,7 +973,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += '<meta name="adr-refresh" content="3">'
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.20.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.21.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.service_report
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1462,6 +1462,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Permissions-Policy', 'microphone=(self), camera=()')
         self.send_header('Content-Security-Policy', "default-src 'none'; connect-src 'self'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-" + VIEW_SCRIPT_HASH + "'; form-action 'self'; base-uri 'none'")
         self.end_headers()
         self.wfile.write(body)
@@ -1591,9 +1592,43 @@ class Handler(BaseHTTPRequestHandler):
         with self.server.pilot.lock:
             self.send_page()
 
+    def receive_voice(self):
+        # Only called after actual ingress peer authentication. CSRF and explicit
+        # audio consent are checked before accepting any recording bytes.
+        from voice_input import MAX_AUDIO
+        pilot=self.server.pilot
+        def respond(status,message):
+            body=json.dumps(message).encode()
+            self.send_response(status);self.send_header('Content-Type','application/json')
+            self.send_header('Content-Length',str(len(body)));self.send_header('Cache-Control','no-store')
+            self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(body)
+        try:
+            token=self.headers.get('X-ADR-CSRF','')
+            if not token.isascii() or not secrets.compare_digest(token,pilot.csrf):
+                respond(403,{'error':'Invalid recording request.'});return
+            if self.headers.get('X-ADR-Voice-Consent')!='yes':
+                respond(400,{'error':'Confirm sending this recording first.'});return
+            length=int(self.headers.get('Content-Length','0'))
+            if not 12<=length<=MAX_AUDIO:
+                respond(400,{'error':'Use a recording smaller than 2 MB.'});return
+            with pilot.lock:
+                if pilot.monitoring_busy():raise DiagnosticError('Wait for the current operation to finish.')
+            self.connection.settimeout(10)
+            audio=self.rfile.read(length)
+            if len(audio)!=length:raise DiagnosticError('Recording upload was incomplete. No retry was made.')
+            with pilot.lock:
+                if pilot.monitoring_busy():raise DiagnosticError('Wait for the current operation to finish.')
+                pilot.diagnostics.start_voice(audio,self.headers.get('Content-Type',''),True,
+                    self.headers.get('X-ADR-Recording-ID',''))
+            respond(202,{'accepted':True})
+        except DiagnosticError as exc:respond(400,{'error':str(exc)})
+        except Exception:respond(400,{'error':'Recording request could not finish. Check status before trying again.'})
+
     def do_POST(self):
         if not self.authorized():
             return
+        if urlsplit(self.path).path == '/voice-transcribe':
+            self.receive_voice();return
         try:
             length = int(self.headers.get('Content-Length', '0'))
         except ValueError:
@@ -1767,7 +1802,7 @@ def main():
     server = ThreadingHTTPServer(('0.0.0.0', 8099), Handler)
     server.pilot = Pilot('/data', '/data/options.json')
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.20.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.21.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:

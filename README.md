@@ -1,12 +1,12 @@
-## Development branch: unified Service Agent 0.20.0
+## Development: Ask ADR voice 0.21.0
 
-One installed Service Agent now includes local network diagnostics and Ask ADR.
-Main remains 0.19.1. See `adr_service_agent/DOCS.md` for configuration transfer,
-privacy, validation and Green acceptance before release.
+Adds optional microphone input, reviewed transcription and spoken replies inside
+Service Agent. Main is 0.20.0. See `adr_service_agent/DOCS.md` for microphone
+limitations, the audio transcription permission and live acceptance steps.
 
 # ADR Service Hub pilot
 
-## Current release: 0.19.1
+## Previous release: 0.19.1
 
 WattBox actions now trigger automatic status verification and update the tile.
 On / Off checks run at 2, 5 and 15 seconds, stopping when the expected state is

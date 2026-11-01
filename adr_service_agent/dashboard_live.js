@@ -146,6 +146,7 @@
       const response=await fetch('diagnostic-state',{credentials:'same-origin',cache:'no-store',redirect:'error',signal:controller.signal});
       if(!response.ok)throw new Error();
       const state=await response.json(),result=state.result||{};
+      window.ADRVoice?.update(state);
       diag('diag-progress').textContent=state.progress;
       diag('adr-analysis-progress').textContent=!state.cloud_enabled?'Enable Ask ADR in Configuration.':state.progress;
       diag('diag-summary').textContent=state.summary;
@@ -153,13 +154,13 @@
       diagnosticRows('diag-targets',(result.targets||[]).map(t=>[t.ip,t.ping.status==='responded'?'Reply':t.ping.status==='no_reply'?'No reply':'Unverified',t.ping.average_ms==null?'Unverified':t.ping.average_ms+' ms']));
       diag('diag-discovery').textContent=result.kind==='discovery'?result.responding.length+' replies / '+result.tested+' tested. Nonresponders remain unverified.':'';
       diagnosticRows('diag-observed',(state.observed||[]).map(d=>[d.ip,localDate(d.first_seen),localDate(d.last_seen)]));
-      document.querySelectorAll('button[data-diagnostic]').forEach(b=>{b.disabled=state.blocked||state.busy||diagnosticSubmitting||(b.dataset.diagnostic==='ask'?!state.cloud_enabled:!state.enabled);});
+      document.querySelectorAll('button[data-diagnostic]').forEach(b=>{b.disabled=state.blocked||state.busy||diagnosticSubmitting||Boolean(window.ADRVoice?.busy())||(b.dataset.diagnostic==='ask'?!state.cloud_enabled:!state.enabled);});
     }catch(_){if(diag('diag-progress'))diag('diag-progress').textContent='Connection unavailable; previous readings retained.';}
     finally{clearTimeout(timeout);diagnosticPolling=false;}
   }
   document.addEventListener('submit',e=>{if(e.target.id==='adr-question-form')e.preventDefault();});
   document.addEventListener('click',async e=>{
-    const button=e.target.closest('button[data-diagnostic]');if(!button||diagnosticSubmitting)return;
+    const button=e.target.closest('button[data-diagnostic]');if(!button||diagnosticSubmitting||window.ADRVoice?.busy())return;
     diagnosticSubmitting=true;
     document.querySelectorAll('button[data-diagnostic]').forEach(b=>b.disabled=true);
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);

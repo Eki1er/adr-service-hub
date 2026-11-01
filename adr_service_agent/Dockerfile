@@ -4,6 +4,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends iputils-ping &&
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY agent.py wattbox.py sonos.py ruckus.py unifi.py araknis.py crestron.py cp4.py control4.py service_report.py bluesound.py sense.py dashboard.py dashboard_visuals.py presentation.py ui_icons.py monitoring.py internet_quality.py internet_test.py ruckus_controller.py dashboard.css dashboard_live.js unifi_gateway.py network_history.py outlet_control.py network_diagnostics.py diagnostic_analysis.py diagnostic_hub.py adr-logo.b64 ./
+COPY agent.py wattbox.py sonos.py ruckus.py unifi.py araknis.py crestron.py cp4.py control4.py service_report.py bluesound.py sense.py dashboard.py dashboard_visuals.py presentation.py ui_icons.py monitoring.py internet_quality.py internet_test.py ruckus_controller.py dashboard.css dashboard_live.js unifi_gateway.py network_history.py outlet_control.py network_diagnostics.py diagnostic_analysis.py diagnostic_hub.py voice_input.py voice_ui.js adr-logo.b64 ./
 CMD ["python", "-u", "agent.py"]
 

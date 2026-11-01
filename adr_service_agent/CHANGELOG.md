@@ -1,3 +1,12 @@
+## 0.21.0 — development
+
+- Add opt-in push-to-talk and audio-file transcription inside Ask ADR.
+- Review transcribed questions before submitting; preserve typed edits.
+- Read answers using the browser voice, with optional automatic readout.
+- Stop microphone tracks on cancellation or page exit; no audio files retained.
+- Gate audio uploads with ingress, CSRF, consent, operation guards and daily quota.
+- Keep voice off by default; existing 0.20.0 settings continue to work.
+
 ## 0.20.0 — development
 
 - Combine bounded local diagnostics and Ask ADR into the existing Service Agent.

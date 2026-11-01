@@ -4,11 +4,13 @@ No second server, external command interface or model-driven device actions.
 """
 import html
 import json
+import re
 import threading
 import time
 from pathlib import Path
 from network_diagnostics import DiagnosticError, config, check, discover, retain, save, summary, import_report
 from diagnostic_analysis import ask
+from voice_input import transcribe, validate as validate_audio
 from presentation import display_text
 from dashboard import key_readings
 from service_report import redact
@@ -45,12 +47,14 @@ class Hub:
     def __init__(self, data, options, report_provider):
         self.data=Path(data)/'diagnostics'; self.options=options;self.report_provider=report_provider
         self.lock=threading.Lock();self.busy=False;self.progress='Ready';self.answer='';self.last_started=0
+        self.transcript='';self.transcript_id='';self.voice_quota={};self.last_voice_started=0
         self.error='';self.settings={'networks':[],'targets':[]};self.history={};self.quota={};self.result={}
         try:
             self.data.mkdir(parents=True,exist_ok=True)
             self.settings=config(options)
             self.history=retain(load(self.data/'history.json'))
             self.quota=load(self.data/'analysis_attempts.json')
+            self.voice_quota=load(self.data/'voice_attempts.json')
             self.result=(self.history.get('samples') or [{}])[-1].get('result',{})
         except DiagnosticError as exc:self.error=str(exc)
         except Exception:self.error='Diagnostic storage or configuration needs attention. No data was removed.'
@@ -58,10 +62,45 @@ class Hub:
     def status(self):
         with self.lock:
             return {'busy':self.busy,'blocked':bool(self.error),'progress':self.error or self.progress,
+                'transcript':self.transcript,'transcript_id':self.transcript_id,
+                'voice_enabled':self.options.get('voice_enabled') is True,
                 'answer':self.answer,'result':self.result,'observed':self.history.get('observed',[]),
                 'summary':summary(self.result) if self.result else 'No local checks yet.',
                 'enabled':self.options.get('diagnostics_enabled') is True,
                 'cloud_enabled':self.options.get('cloud_analysis_enabled') is True}
+
+    def start_voice(self,audio,mime,confirmed,request_id,thread_factory=threading.Thread):
+        with self.lock:
+            if self.error:raise DiagnosticError(self.error)
+            if self.busy:raise DiagnosticError('Diagnostics are already running.')
+            if self.options.get('voice_enabled') is not True or self.options.get('cloud_analysis_enabled') is not True or not confirmed:
+                raise DiagnosticError('Enable voice and confirm sending this recording.')
+            if not isinstance(request_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',request_id):
+                raise DiagnosticError('Invalid recording request.')
+            mime=validate_audio(audio,mime)
+            if time.time()-self.last_voice_started<10:raise DiagnosticError('Wait ten seconds between diagnostic requests.')
+            day=time.strftime('%Y-%m-%d',time.gmtime())
+            count=self.voice_quota.get('count',0) if self.voice_quota.get('day')==day else 0
+            if type(count) is not int or not 0<=count<10:
+                raise DiagnosticError('Daily voice limit reached (10 attempts, UTC day).')
+            quota={'day':day,'count':count+1}
+            save(self.data/'voice_attempts.json',quota);self.voice_quota=quota
+            self.busy=True;self.last_voice_started=time.time();self.progress='Transcribing question'
+            self.transcript='';self.transcript_id=request_id
+        def run():
+            try:
+                text=transcribe(self.options,audio,mime,True)
+                with self.lock:self.transcript=text;self.progress='Review your question, then tap Ask ADR.'
+            except DiagnosticError as exc:
+                with self.lock:self.progress=str(exc)
+            except Exception:
+                with self.lock:self.progress='Transcription could not finish. Type your question or try again.'
+            finally:
+                with self.lock:self.busy=False
+        try:thread_factory(target=run,daemon=True).start()
+        except Exception:
+            with self.lock:self.busy=False;self.progress='Recording job could not start.'
+            raise DiagnosticError('Recording job could not start.') from None
 
     def record(self,result):
         with self.lock:
@@ -137,5 +176,8 @@ def panels(hub, csrf):
     assistant='''<section id="ask-adr"><h2>Ask ADR</h2><form id="adr-question-form"><input type="hidden" id="diag-csrf" value="'''+esc(csrf)+'''">
 <label for="adr-question">Question</label><textarea id="adr-question" maxlength="1000" placeholder="What needs attention?" rows="3"></textarea>
 <label class="analysis-consent"><input type="checkbox" id="adr-analysis-consent"> Send my question and collected readings to OpenAI. API usage applies.</label>
-<button type="button" data-diagnostic="ask">Ask ADR</button></form><p id="adr-analysis-progress" role="status"></p><div id="adr-answer" aria-live="polite"></div></section>'''
+<div class="toolbar"><button type="button" id="adr-record">Speak</button><button type="button" id="adr-record-cancel" hidden>Cancel</button><button type="button" data-diagnostic="ask">Ask ADR</button></div>
+<label class="analysis-consent"><input type="checkbox" id="adr-voice-consent"> Send my recording to OpenAI for transcription. API usage applies.</label>
+<div class="voice-file"><label for="adr-audio-file">Or choose a recording</label><input id="adr-audio-file" type="file" accept="audio/*,.m4a,.mp4,.webm,.wav,.mp3"><button type="button" id="adr-transcribe-file">Transcribe</button></div><p id="adr-transcript"></p><button type="button" id="adr-use-transcript" hidden>Use transcript</button><p id="adr-voice-status" role="status" aria-live="polite"></p></form>
+<label class="analysis-consent"><input type="checkbox" id="adr-read-replies"> Read replies aloud</label><div class="toolbar voice-output"><button type="button" id="adr-read-answer">Read answer</button><button type="button" id="adr-stop-reading">Stop reading</button></div><p id="adr-analysis-progress" role="status"></p><div id="adr-answer" aria-live="polite"></div></section>'''
     return network,assistant

@@ -1,3 +1,65 @@
+# Ask ADR voice — 0.21.0 development build
+
+Voice is part of the existing Service Agent app. It does not install another app
+or change the working connection settings. Main remains 0.20.0 while this build
+is reviewed and tested.
+
+## Enable and use
+
+1. In Service Agent Configuration, set `voice_enabled: true`. Keep the working
+   cloud analysis settings and API key. Save and restart Service Agent only.
+2. If your key is restricted to Responses, also allow creating audio
+   transcriptions. The fixed transcription model is `gpt-transcribe`. Do not
+   grant unrelated permissions or share the key in chat.
+3. In Ask ADR, check the recording consent box. Tap Speak, allow microphone
+   access, then tap Stop recording. The browser stops after 20 seconds.
+4. Review the transcription in Question and tap Ask ADR. Nothing is submitted
+   for analysis automatically. If you typed while transcribing, the typed text
+   is kept and Use transcript offers the spoken text separately.
+5. Tap Read answer for spoken output, or select Read replies aloud for new
+   answers. Stop reading interrupts speech. Speech uses the device/browser voice;
+   the operating system may use its own voice service. There is no OpenAI speech
+   output request or additional OpenAI speech-output permission.
+
+Microphone capture requires HTTPS, browser/app permission and permission from
+any containing frame. The Home Assistant app and Safari may behave differently;
+this must be tested on the actual phone. The app does not change parent-frame
+security settings. Keyboard dictation and typed questions remain available.
+Choose a recording and Transcribe offers an audio-file fallback when microphone
+capture is blocked. MP4/M4A, WebM, WAV and MP3 are supported, up to 2 MB.
+
+## Privacy and behavior
+
+- Voice defaults off. Microphone access and sending audio require explicit action
+  and consent. There is no wake word or background listening.
+- Cancel discards an unsent recording. Leaving or hiding the page stops microphone
+  tracks and speech. Once sent, an upload cannot be recalled from the provider.
+- Audio is held in memory only and is not written to app files or logs. A browser
+  recording is capped at 20 seconds; uploaded files are capped by byte size, not
+  independently decoded or duration-checked by the app.
+- One fixed HTTPS transcription request is sent with a 45-second connection
+  timeout and bounded response. No automatic transcription retry. Daily voice
+  attempts are limited to 10 per UTC day, separately from the 10 analysis attempts.
+  Failed attempts count; quotas persist before sending.
+- The API key stays on Green. Only a random request identifier correlates the
+  transcript back to the requesting page. The latest transcript is kept in app
+  memory until another voice request or restart, never in history files.
+- Transcription cannot run diagnostics, send an Ask ADR question, or change an
+  outlet. Existing checks and power confirmation guards apply to voice uploads.
+- Spoken replies stay within Ask ADR's existing evidence and action limitations.
+
+## Validation
+
+248 Python tests and the two Node UI checks pass offline. They cover consent,
+ingress/CSRF, size/type bounds, no audio persistence, quotas, busy guards,
+cancellation, late microphone permission, transcript review, typed edits and
+speech controls. No live OpenAI transcription, phone microphone, Docker image
+build or on-device audio playback has been verified from development tooling.
+Next acceptance is Speak/Stop on the actual iPhone, review/send, read/stop reply,
+permission rejection and existing outlet action confirmation behavior.
+
+---
+
 # Unified Service Agent 0.20.0 — development build
 
 This branch combines the Service Agent dashboard, bounded local diagnostics and
