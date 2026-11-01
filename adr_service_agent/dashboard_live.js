@@ -66,6 +66,7 @@
       if (old.nodeValue !== next.nodeValue) old.nodeValue = next.nodeValue;
       return;
     }
+    if (old.id === 'diagnostics' || old.id === 'ask-adr') return;
     if (old.isEqualNode(next)) return;
     if (old.tagName === 'FORM' && (touched.has(old) || old.contains(document.activeElement))) return;
     const protectedAttr = name => (name === 'open' && old.tagName === 'DETAILS') || (name === 'checked' && old.matches('input[name="dashboard-view"]'));
@@ -92,7 +93,7 @@
   let stopped = false;
   const schedule = delay => { if (!stopped && seconds) setTimeout(update, delay || seconds * 1000); };
   async function update() {
-    if (document.hidden || document.querySelector('form:focus-within') || [...document.forms].some(f => touched.has(f))) { schedule(3000); return; }
+    if (document.hidden || document.querySelector('form:not(#adr-question-form):focus-within') || [...document.forms].some(f => f.id !== 'adr-question-form' && touched.has(f))) { schedule(3000); return; }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
@@ -101,7 +102,7 @@
       const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
       const incoming = doc.querySelector('main');
       if (!incoming || !incoming.querySelector('.toolbar') || doc.querySelector('script[type="module"]')?.textContent !== document.querySelector('script[type="module"]')?.textContent) throw new Error('Page changed; reopen to update');
-      if (document.querySelector('form:focus-within') || [...document.forms].some(f => touched.has(f))) { schedule(3000); return; }
+      if (document.querySelector('form:not(#adr-question-form):focus-within') || [...document.forms].some(f => f.id !== 'adr-question-form' && touched.has(f))) { schedule(3000); return; }
       // Keep the viewed element at the same screen position when content above changes.
       const anchor = [...main.querySelectorAll('summary,h2,h3,.metric,.primary-metric')].find(e => e.getBoundingClientRect().top >= 0 && e.getBoundingClientRect().height);
       const top = anchor?.getBoundingClientRect().top;
@@ -124,5 +125,66 @@
     schedule();
   }
   addEventListener('pagehide', () => { stopped = true; });
+  // Diagnostic status polling updates only result nodes, preserving the question,
+  // consent, selected category and open tiles. GETs never trigger checks.
+  let diagnosticSubmitting=false;
+  const diag = id => document.getElementById(id);
+  function diagnosticRows(id,rows){
+    const body=diag(id);if(!body)return;
+    const serialized=JSON.stringify(rows);if(body.dataset.rows===serialized)return;
+    const fragment=document.createDocumentFragment();
+    for(const row of rows){const tr=document.createElement('tr');for(const value of row){const td=document.createElement('td');td.textContent=String(value??'Unverified');tr.append(td);}fragment.append(tr);}
+    body.replaceChildren(fragment);body.dataset.rows=serialized;
+  }
+  const localDate=value=>{const d=new Date(value);return value&&!Number.isNaN(d.valueOf())?new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'}).format(d):'Unverified';};
+  let diagnosticPolling=false;
+  async function diagnosticStatus(){
+    if(!diag('diagnostics')||diagnosticPolling||document.hidden)return;
+    diagnosticPolling=true;
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
+    try{
+      const response=await fetch('diagnostic-state',{credentials:'same-origin',cache:'no-store',redirect:'error',signal:controller.signal});
+      if(!response.ok)throw new Error();
+      const state=await response.json(),result=state.result||{};
+      diag('diag-progress').textContent=state.progress;
+      diag('adr-analysis-progress').textContent=!state.cloud_enabled?'Enable Ask ADR in Configuration.':state.progress;
+      diag('diag-summary').textContent=state.summary;
+      diag('adr-answer').textContent=state.answer;
+      diagnosticRows('diag-targets',(result.targets||[]).map(t=>[t.ip,t.ping.status==='responded'?'Reply':t.ping.status==='no_reply'?'No reply':'Unverified',t.ping.average_ms==null?'Unverified':t.ping.average_ms+' ms']));
+      diag('diag-discovery').textContent=result.kind==='discovery'?result.responding.length+' replies / '+result.tested+' tested. Nonresponders remain unverified.':'';
+      diagnosticRows('diag-observed',(state.observed||[]).map(d=>[d.ip,localDate(d.first_seen),localDate(d.last_seen)]));
+      document.querySelectorAll('button[data-diagnostic]').forEach(b=>{b.disabled=state.blocked||state.busy||diagnosticSubmitting||(b.dataset.diagnostic==='ask'?!state.cloud_enabled:!state.enabled);});
+    }catch(_){if(diag('diag-progress'))diag('diag-progress').textContent='Connection unavailable; previous readings retained.';}
+    finally{clearTimeout(timeout);diagnosticPolling=false;}
+  }
+  document.addEventListener('submit',e=>{if(e.target.id==='adr-question-form')e.preventDefault();});
+  document.addEventListener('click',async e=>{
+    const button=e.target.closest('button[data-diagnostic]');if(!button||diagnosticSubmitting)return;
+    diagnosticSubmitting=true;
+    document.querySelectorAll('button[data-diagnostic]').forEach(b=>b.disabled=true);
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
+    try{
+      const body=new URLSearchParams({csrf:diag('diag-csrf').value});
+      if(button.dataset.diagnostic==='discover')body.set('subnet',diag('diag-subnet').value);
+      if(button.dataset.diagnostic==='ask'){
+        body.set('question',diag('adr-question').value);
+        body.set('confirm',diag('adr-analysis-consent').checked?'yes':'no');
+      }
+      const response=await fetch('diagnostic-'+button.dataset.diagnostic,{method:'POST',body,credentials:'same-origin',redirect:'error',signal:controller.signal});
+      if(response.status!==202){
+        const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+        throw new Error(doc.querySelector('.notice p')?.textContent||'Request could not start.');
+      }
+      diagnosticSubmitting=false;await diagnosticStatus();
+    }catch(error){
+      diagnosticSubmitting=false;await diagnosticStatus();
+      const message=error.name==='AbortError'?'Request timed out. Check status before trying again.':error.message;
+      diag('diag-progress').textContent=message;diag('adr-analysis-progress').textContent=message;
+    }finally{clearTimeout(timeout);}
+  });
+  diagnosticStatus();
+  setInterval(()=>{if(!stopped&&!diagnosticSubmitting)diagnosticStatus();},2500);
+
   schedule();
 })();
+

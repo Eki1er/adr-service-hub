@@ -1,3 +1,82 @@
+# Unified Service Agent 0.20.0 — development build
+
+This branch combines the Service Agent dashboard, bounded local diagnostics and
+Ask ADR in **one installed app** (`adr_service_agent`), one process, one ingress
+port and one configuration. It does not install a second diagnostic app.
+Main remains 0.19.1 until the combined build is approved and tested on Green.
+
+## Configuration and transition
+
+Existing WattBox, UniFi, Ruckus, monitoring and certificate settings remain in the
+same Service Agent app data. New diagnostic and cloud settings default off.
+
+In Service Agent Configuration, add the settings already tested in Diagnostics
+Preview: `allowed_subnets`, `targets`, `dns_name`, `cloud_analysis_enabled`,
+`openai_api_key`, and `openai_model`. Enable `diagnostics_enabled` to include local
+connectivity checks in Run All Checks and the existing recurring system check.
+Use private IPv4 networks with /24 or smaller scope; add each target separately
+inside an allowed network. No client addresses or credentials are shipped.
+
+The separate preview app's private settings and history are not automatically
+accessible to Service Agent. Transfer settings locally; never paste API keys in
+chat, reports or GitHub. Keep the preview stopped while testing the combined
+installation. Retire it only after validating checks and Ask ADR in Service Agent.
+Preview history is retained by its own app until that app is removed; this build
+does not copy or delete it.
+
+## Dashboard
+
+- Network contains connectivity, DNS, manual discovery and observed addresses.
+- Ask ADR uses the current combined report directly; no import or second app.
+- Existing Power and AV/Automation views, graphs and outlet confirmations remain.
+- Diagnostic polling changes result nodes only. Questions, consent, category and
+  expanded tiles are retained; typing an Ask ADR question does not pause service
+  updates. Observed-device timestamps use the viewer's local time zone.
+
+## Checks, cloud access and controls
+
+Local checks use fixed ICMP commands and TCP connects to ports 80 and 443 only.
+Discovery is manual, restricted to explicit local subnets and four workers.
+It never infers Wi-Fi association or treats a missing reply as an offline device.
+The image includes iputils-ping and requests NET_RAW only; host networking and
+Supervisor API access remain disabled. Existing system data API access is retained.
+
+Diagnostics and Ask ADR share operation guards with service checks and outlet
+confirmations. Scheduled local checks run sequentially inside the existing report;
+there is no second scheduler, automatic subnet discovery or automatic AI call.
+
+Ask ADR requires enabling cloud analysis and checking consent on the page. It
+sends the question, latest local measurements, one previous target check and
+bounded, allowlisted service health readings/summaries with original timestamps.
+Raw console responses, credentials, configuration, and internal entity identifiers
+are excluded. Report values matching configured secrets are redacted. The model
+has no tools and cannot change devices. Answers request concise plain text.
+
+The API key stays server-side. One TLS-verified Responses request is allowed per
+ask, with no automatic retries, `store: false` and a 10-attempt UTC-day limit
+persisted before the call. Provider processing still applies. Use the working
+model and Responses write permission from your preview setup. No audio permission
+or microphone feature is added in this build; voice follows core consolidation.
+
+Existing confirmed WattBox actions and post-action outlet verification remain.
+Ask ADR does not bypass their confirmations or run any power action. Discovery
+and analysis status GETs never initiate checks.
+
+## Validation and rollout
+
+Offline tests cover configuration, probe bounds, evidence filtering, quota,
+actual ingress peer/CSRF, operation guards, existing controls and upgrade defaults.
+Docker image building and live Green acceptance must still be completed before
+publishing main. Live acceptance: upgrade the existing Service Agent (same slug),
+verify saved connection trust, run combined checks, verify current gateway speed
+and AP statistics, test Ask ADR, verify open views while refreshing, then test one
+noncritical outlet action and automatic readback. Do not uninstall the working app
+to install this build. Diagnostics Preview should stay stopped during acceptance.
+
+Central team access, remote chat connectors and voice are future work.
+
+---
+
 # Outlet status verification: 0.19.1
 
 After an On or Off action the app automatically reads WattBox at 2, 5 and 15

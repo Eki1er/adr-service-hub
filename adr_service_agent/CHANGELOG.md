@@ -1,3 +1,13 @@
+## 0.20.0 — development
+
+- Combine bounded local diagnostics and Ask ADR into the existing Service Agent.
+- Use current service readings directly for analysis; no report imports.
+- Run configured connectivity checks in the existing check schedule.
+- Preserve questions and expanded views during status updates.
+- Keep cloud analysis opt-in, request-bound and separate from confirmed controls.
+- Add optional configuration, iputils-ping and NET_RAW for local diagnostics.
+- Existing 0.19.1 settings default to unchanged monitoring with new features off.
+
 # 0.19.1
 
 - Automatically read WattBox outlet status after On / Off / Restart actions,

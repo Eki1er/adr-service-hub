@@ -1,0 +1,141 @@
+"""Diagnostics and decision support inside the Service Agent process.
+
+No second server, external command interface or model-driven device actions.
+"""
+import html
+import json
+import threading
+import time
+from pathlib import Path
+from network_diagnostics import DiagnosticError, config, check, discover, retain, save, summary, import_report
+from diagnostic_analysis import ask
+from presentation import display_text
+from dashboard import key_readings
+from service_report import redact
+
+
+def load(path):
+    if not path.exists(): return {}
+    try:
+        if path.stat().st_size > 2*1024*1024: raise ValueError()
+        value=json.loads(path.read_text())
+        if not isinstance(value,dict): raise ValueError()
+        return value
+    except (OSError,ValueError):
+        raise DiagnosticError('Saved diagnostics could not be read. Inspect app storage; no data was removed.') from None
+
+
+def evidence(report, options):
+    """Allowlist small health fields, never options, identifiers or raw consoles."""
+    if not report: return {}
+    out=import_report(report)
+    out['summaries']=[]
+    for item in report.get('checks',[])[:20]:
+        snapshot=item.get('snapshot') or {}
+        out['summaries'].append({'system':item.get('system'), 'status':item.get('status'),
+            'checked_at':item.get('post_action_verified_at') or item.get('completed_at'),
+            'readings':[display_text(str(v)[:250]) for v in key_readings(item.get('system'),snapshot)[:12]],
+            'findings':[display_text(str(v)[:250]) for v in item.get('service_findings',[])[:6]],
+            'limitations':[display_text(str(v)[:250]) for v in item.get('data_limitations',[])[:4]]})
+    private=[v for k,v in options.items() if any(w in k for w in ('password','api_key','token')) and isinstance(v,str) and v]
+    return redact(out,private)
+
+
+class Hub:
+    def __init__(self, data, options, report_provider):
+        self.data=Path(data)/'diagnostics'; self.options=options;self.report_provider=report_provider
+        self.lock=threading.Lock();self.busy=False;self.progress='Ready';self.answer='';self.last_started=0
+        self.error='';self.settings={'networks':[],'targets':[]};self.history={};self.quota={};self.result={}
+        try:
+            self.data.mkdir(parents=True,exist_ok=True)
+            self.settings=config(options)
+            self.history=retain(load(self.data/'history.json'))
+            self.quota=load(self.data/'analysis_attempts.json')
+            self.result=(self.history.get('samples') or [{}])[-1].get('result',{})
+        except DiagnosticError as exc:self.error=str(exc)
+        except Exception:self.error='Diagnostic storage or configuration needs attention. No data was removed.'
+
+    def status(self):
+        with self.lock:
+            return {'busy':self.busy,'blocked':bool(self.error),'progress':self.error or self.progress,
+                'answer':self.answer,'result':self.result,'observed':self.history.get('observed',[]),
+                'summary':summary(self.result) if self.result else 'No local checks yet.',
+                'enabled':self.options.get('diagnostics_enabled') is True,
+                'cloud_enabled':self.options.get('cloud_analysis_enabled') is True}
+
+    def record(self,result):
+        with self.lock:
+            history=retain(dict(self.history),result)
+            save(self.data/'history.json',history)
+            self.history=history;self.result=result
+
+    def scheduled_check(self):
+        if self.error:raise DiagnosticError(self.error)
+        if self.options.get('diagnostics_enabled') is not True or not self.settings['targets']:
+            raise DiagnosticError('Enable diagnostics and configure target addresses first.')
+        result=check(self.settings)
+        self.record(result)
+        return result
+
+    def start(self,action,fields,thread_factory=threading.Thread):
+        with self.lock:
+            if self.error:raise DiagnosticError(self.error)
+            if self.busy:raise DiagnosticError('Diagnostics are already running.')
+            if time.time()-self.last_started<10:raise DiagnosticError('Wait ten seconds between diagnostic requests.')
+            if action not in ('check','discover','ask'):raise DiagnosticError('Unsupported diagnostic request.')
+            if action!='ask' and self.options.get('diagnostics_enabled') is not True:
+                raise DiagnosticError('Enable diagnostics in Configuration first.')
+            if action=='check' and not self.settings['targets']:raise DiagnosticError('Configure target addresses first.')
+            if action=='discover' and fields.get('subnet') not in [str(n) for n in self.settings['networks']]:
+                raise DiagnosticError('Choose a configured subnet.')
+            if action=='ask':
+                if self.options.get('cloud_analysis_enabled') is not True or fields.get('confirm')!='yes':
+                    raise DiagnosticError('Enable cloud analysis and confirm sending readings.')
+                if not 1<=len(fields.get('question','').strip())<=1000:raise DiagnosticError('Enter a question of 1–1000 characters.')
+                # Caller holds the app lock: capture a consistent, sanitized report.
+                service=self.report_provider()
+                if not service and not self.result:raise DiagnosticError('Run checks first.')
+                previous=[s['result'] for s in self.history.get('samples',[])[:-1] if s.get('result',{}).get('kind')=='target_checks']
+                collected={'latest_checks':self.result,'previous_checks':previous[-1:],'service_report':service}
+                # Fail before charging the local attempt quota if evidence is too large.
+                if len(json.dumps(collected,allow_nan=False).encode())>40000:
+                    raise DiagnosticError('Readings exceed the analysis limit. Run a focused local check first.')
+                day=time.strftime('%Y-%m-%d',time.gmtime())
+                count=self.quota.get('count',0) if self.quota.get('day')==day else 0
+                if type(count) is not int or not 0<=count<10:raise DiagnosticError('Daily analysis limit reached (10 attempts, UTC day).')
+                quota={'day':day,'count':count+1};save(self.data/'analysis_attempts.json',quota);self.quota=quota
+            self.busy=True;self.last_started=time.time();self.progress='Starting'
+        def progress(text):
+            with self.lock:self.progress=text
+        def run():
+            try:
+                if action=='ask':
+                    progress('Reviewing readings')
+                    answer=ask(self.options,fields['question'],collected,True)
+                    with self.lock:self.answer=display_text(answer)
+                else:
+                    result=check(self.settings,progress=progress) if action=='check' else discover(self.settings,fields['subnet'],progress=progress)
+                    self.record(result)
+                progress('Complete')
+            except DiagnosticError as exc:progress(str(exc))
+            except Exception:progress('Request could not finish. Previous readings retained; no retry was made.')
+            finally:
+                with self.lock:self.busy=False
+        try:thread_factory(target=run,daemon=True).start()
+        except Exception:
+            with self.lock:self.busy=False;self.progress='Job could not start.'
+            raise DiagnosticError('Job could not start.') from None
+
+
+def panels(hub, csrf):
+    esc=lambda s:html.escape(str(s),quote=True)
+    subnets=''.join('<option value="'+esc(n)+'">'+esc(n)+'</option>' for n in hub.settings['networks'])
+    network='''<section id="diagnostics"><h2>Diagnostics</h2><p id="diag-progress" role="status" aria-live="polite">Ready</p>
+<div class="toolbar"><button type="button" data-diagnostic="check">Check connectivity</button><select id="diag-subnet" aria-label="Discovery subnet">'''+subnets+'''</select><button type="button" data-diagnostic="discover">Discover devices</button></div>
+<p id="diag-summary"></p><div class="diagnostic-table"><table><thead><tr><th>Target</th><th>Ping</th><th>Latency</th></tr></thead><tbody id="diag-targets"></tbody></table></div><p id="diag-discovery"></p>
+<details id="diagnostic-observed"><summary>Observed devices</summary><div class="diagnostic-table"><table><thead><tr><th>Address</th><th>First seen</th><th>Last seen</th></tr></thead><tbody id="diag-observed"></tbody></table></div></details></section>'''
+    assistant='''<section id="ask-adr"><h2>Ask ADR</h2><form id="adr-question-form"><input type="hidden" id="diag-csrf" value="'''+esc(csrf)+'''">
+<label for="adr-question">Question</label><textarea id="adr-question" maxlength="1000" placeholder="What needs attention?" rows="3"></textarea>
+<label class="analysis-consent"><input type="checkbox" id="adr-analysis-consent"> Send my question and collected readings to OpenAI. API usage applies.</label>
+<button type="button" data-diagnostic="ask">Ask ADR</button></form><p id="adr-analysis-progress" role="status"></p><div id="adr-answer" aria-live="polite"></div></section>'''
+    return network,assistant

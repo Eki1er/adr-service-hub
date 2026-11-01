@@ -31,6 +31,16 @@ def assess(name, snapshot):
     result = {'service_findings': [], 'data_limitations': [], 'observations': []}
     service, limits, notes = (result[k] for k in ('service_findings', 'data_limitations', 'observations'))
     usable = True
+    if name == 'Network diagnostics':
+        notes.append(str(len(snapshot.get('targets', []))) + ' configured targets checked.')
+        for row in snapshot.get('targets', []):
+            if row.get('ping', {}).get('status') != 'responded':
+                limits.append(str(row.get('ip')) + ': no verified ICMP reply; device operation remains unverified.')
+        if snapshot.get('dns', {}).get('status') != 'resolved':
+            limits.append('DNS resolution remains unverified.')
+        limits.extend(snapshot.get('limitations', []))
+        result['status'] = 'verified'
+        return result
     entry = snapshot.get('entry')
     if name in ('Crestron', 'Control4', 'UniFi', 'Ruckus'):
         if not entry:
@@ -191,7 +201,7 @@ def compare(current, previous):
 
 
 def run_checks(jobs, baselines, progress=lambda *_: None, secrets=(), history=(), completed=lambda *_: None):
-    report = {'format': 'adr-service-report-v1', 'agent_version': '0.19.1', 'read_only': True,
+    report = {'format': 'adr-service-report-v1', 'agent_version': '0.20.0', 'read_only': True,
         'started_at': now(), 'completed_at': None, 'checks': [],
         'limitations': ['Verified means the specified read succeeded, not that every device function is healthy.',
             'Checks run sequentially; per-check timestamps differ. No automatic retries or device actions.',

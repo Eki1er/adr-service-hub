@@ -13,6 +13,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from service_report import run_checks, SkipCheck
+from diagnostic_hub import Hub as DiagnosticHub, panels as diagnostic_panels, evidence as diagnostic_evidence
+from network_diagnostics import DiagnosticError
 from monitoring import MonitoringSchedule
 from presentation import present_html
 from ui_icons import icon
@@ -215,13 +217,15 @@ class Pilot:
             except (ValueError, KeyError, OSError, TypeError):
                 self.cooldown_error = True
 
+        self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
+            lambda: diagnostic_evidence(self.service_report, self.araknis_options))
         self.monitor = MonitoringSchedule(self.araknis_options, self.data / 'monitoring_state.json')
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
         self.monitor_active = False
 
     def monitoring_busy(self):
-        return any((self.service_running, self.internet_test_running, self.controller_running,
+        return bool(getattr(self, "diagnostics", None) and self.diagnostics.busy) or any((self.service_running, self.internet_test_running, self.controller_running,
             bool(self.power_pending and time.monotonic()-self.power_pending["created"]<=120), self.active, self.araknis_running, self.cp4_running, self.crestron_running,
             self.control4_running, self.bluesound_running, self.sense_running)) or any(
                 time.monotonic() - item[0] <= 120 for item in self.confirmations.values())
@@ -335,7 +339,7 @@ class Pilot:
                     snapshot['controller_error'] = str(exc)
             return snapshot
 
-        return [
+        jobs = [
             ('WattBox', target_id('wattbox', 'known_hosts'), wattbox),
             ('Sonos', 'ha-sonos', collect_sonos),
             ('Bluesound', 'ha-bluesound', collect_bluesound),
@@ -350,6 +354,10 @@ class Pilot:
                 lambda: console(cp4_settings, self.cp4_options, 'cp4_known_hosts', collect_cp4)),
             ('Sense', 'ha-sense', collect_sense),
         ]
+        if self.araknis_options.get('diagnostics_enabled') is True:
+            identity = hashlib.sha256(json.dumps([self.araknis_options.get('allowed_subnets', []), self.araknis_options.get('targets', []), self.araknis_options.get('dns_name', 'example.com')], sort_keys=True).encode()).hexdigest()
+            jobs.append(('Network diagnostics', identity, self.diagnostics.scheduled_check))
+        return jobs
 
     def add_service_history(self, system, subject, note):
         subject, note = subject.strip(), note.strip()
@@ -380,6 +388,8 @@ class Pilot:
         self.result = 'Historical observation saved locally for this target. It does not suppress future findings.'
 
     def start_service_checks(self, scheduled=False):
+        if self.diagnostics.busy:
+            raise ProtocolError("Wait for diagnostics to finish.")
         if self.power_pending and time.monotonic()-self.power_pending['created']<=120:
             raise ProtocolError('Confirm or cancel the pending outlet action first.')
         if self.service_running:
@@ -407,7 +417,7 @@ class Pilot:
             try:
                 report, baselines = run_checks(jobs, self.service_baselines, progress,
                     tuple(self.araknis_options.get(k, '') for k in
-                        ('password', 'araknis_password', 'cp4_password', 'ruckus_controller_password', 'unifi_gateway_api_key')), history=self.service_history, completed=completed)
+                        ('password', 'araknis_password', 'cp4_password', 'ruckus_controller_password', 'unifi_gateway_api_key', 'openai_api_key')), history=self.service_history, completed=completed)
                 with self.lock:
                     self.service_steps = {check['system']: check['status'] for check in report['checks']}
                     self.service_completed = len(report['checks'])
@@ -963,7 +973,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += '<meta name="adr-refresh" content="3">'
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.19.1</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.20.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.service_report
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1032,7 +1042,9 @@ def page(pilot, confirmation=None, candidate=None, error=None):
             outlet_markup += '</div></div>'
         if pilot.araknis_options.get('allow_outlet_control') is not True:
             outlet_markup += '<p class="report-caption">Enable allow_outlet_control in Configuration to use outlet controls.</p>'
-        text += grouped_cards(report, outlet_controls=outlet_markup)
+        network_diagnostics_markup, assistant_markup = diagnostic_panels(pilot.diagnostics, pilot.csrf)
+        text += grouped_cards(report, outlet_controls=outlet_markup, diagnostics_markup=network_diagnostics_markup)
+        text += assistant_markup
     text += monitoring_panel(pilot) + network_tools
     text += '</section>'
     if pilot.service_history:
@@ -1564,6 +1576,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.authorized():
             return
+        if urlsplit(self.path).path == '/diagnostic-state':
+            body = json.dumps(self.server.pilot.diagnostics.status()).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.end_headers();self.wfile.write(body)
+            return
         if urlsplit(self.path).path not in ('', '/'):
             self.send_error(404)
             return
@@ -1578,7 +1599,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self.send_error(400)
             return
-        if not 0 < length <= 4096 or self.headers.get('Content-Type', '').split(';')[0] != 'application/x-www-form-urlencoded':
+        limit = 16384 if urlsplit(self.path).path.startswith('/diagnostic-') else 4096
+        if not 0 < length <= limit or self.headers.get('Content-Type', '').split(';')[0] != 'application/x-www-form-urlencoded':
             self.send_error(400)
             return
         try:
@@ -1586,6 +1608,8 @@ class Handler(BaseHTTPRequestHandler):
         except (UnicodeDecodeError, ValueError):
             self.send_error(400)
             return
+        if any(len(v) != 1 for v in params.values()):
+            self.send_error(400);return
         csrf = params.get('csrf', [''])[0]
         pilot = self.server.pilot
         if not secrets.compare_digest(csrf, pilot.csrf):
@@ -1601,7 +1625,20 @@ class Handler(BaseHTTPRequestHandler):
                     raise ProtocolError('A network check is running. Wait for automatic results before another action.')
                 if getattr(pilot, 'service_running', False) and action not in ('refresh', 'service-check', 'service-report'):
                     raise ProtocolError('Combined checks are running. Refresh results or wait for completion before another action.')
-                if action == 'outlet-prepare':
+                if getattr(getattr(pilot, 'diagnostics', None), 'busy', False) and action not in ('refresh', 'service-report'):
+                    raise ProtocolError('Wait for diagnostics to finish.')
+                if action.startswith('diagnostic-'):
+                    if pilot.monitoring_busy():
+                        raise ProtocolError('Wait for the current check or power action to finish.')
+                    try:
+                        pilot.diagnostics.start(action[len('diagnostic-'):], {k:v[0] for k,v in params.items() if k!='csrf'})
+                    except DiagnosticError as exc:
+                        raise ProtocolError(str(exc)) from None
+                    self.send_response(202)
+                    self.send_header('Content-Length', '0')
+                    self.send_header('Cache-Control', 'no-store')
+                    self.end_headers()
+                elif action == 'outlet-prepare':
                     try: number = int(params.get('outlet',[''])[0])
                     except ValueError: raise ProtocolError('Invalid outlet.') from None
                     prepare_outlet(pilot, number, params.get('operation',[''])[0])
@@ -1730,7 +1767,7 @@ def main():
     server = ThreadingHTTPServer(('0.0.0.0', 8099), Handler)
     server.pilot = Pilot('/data', '/data/options.json')
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.19.1 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.20.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:

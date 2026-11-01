@@ -1,3 +1,9 @@
+## Development branch: unified Service Agent 0.20.0
+
+One installed Service Agent now includes local network diagnostics and Ask ADR.
+Main remains 0.19.1. See `adr_service_agent/DOCS.md` for configuration transfer,
+privacy, validation and Green acceptance before release.
+
 # ADR Service Hub pilot
 
 ## Current release: 0.19.1
