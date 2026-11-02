@@ -1,5 +1,5 @@
 name: ADR Service Agent
-version: 0.22.1
+version: 0.23.0
 slug: adr_service_agent
 description: Unified monitoring, network diagnostics, Ask ADR, and confirmed outlet
   controls.
@@ -61,6 +61,8 @@ options:
   cloud_analysis_enabled: false
   openai_api_key: ''
   openai_model: ''
+  native_events_enabled: false
+  native_event_sources: []
 schema:
   ups_monitoring_enabled: bool?
   ups_poll_interval_seconds: int(5,300)?
@@ -106,5 +108,14 @@ schema:
   cloud_analysis_enabled: bool?
   openai_api_key: password?
   openai_model: str?
+  native_events_enabled: bool?
+  native_event_sources:
+  - host: str
+    vendor: list(unifi|ruckus|wattbox|crestron|control4|sonos|bluos)
+    name: str
 privileged:
 - NET_RAW
+ports:
+  5514/udp: null
+ports_description:
+  5514/udp: Native device syslog input (enable only on the client LAN)

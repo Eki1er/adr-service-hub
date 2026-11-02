@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import secrets
+import signal
 import threading
 import time
 from datetime import datetime
@@ -15,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 from service_report import run_checks, SkipCheck
 from diagnostic_hub import Hub as DiagnosticHub, panels as diagnostic_panels, evidence as diagnostic_evidence
 from network_diagnostics import DiagnosticError
+from native_events import NativeEvents, MAX_IMPORT
 from power_events import PowerJournal, identity as power_identity
 from monitoring import MonitoringSchedule
 from presentation import present_html
@@ -222,8 +224,9 @@ class Pilot:
         self.ups_interval=interval if type(interval) is int and 5<=interval<=300 else 15
         self.ups_running=False;self.ups_next_due=time.time()+60
         self.power_journal=PowerJournal(self.data/'power_events.json',self.ups_interval)
+        self.native_events=NativeEvents(self.data/'native_events.json',self.araknis_options)
         self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
-            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status()))
+            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status(), self.native_events.status()))
         self.monitor = MonitoringSchedule(self.araknis_options, self.data / 'monitoring_state.json')
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
@@ -1029,7 +1032,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += '<meta name="adr-refresh" content="3">'
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.22.1</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.23.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.service_report
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1636,6 +1639,7 @@ class Handler(BaseHTTPRequestHandler):
         if urlsplit(self.path).path == '/diagnostic-state':
             state=self.server.pilot.diagnostics.status()
             state['power_monitor']=self.server.pilot.power_status()
+            state['native_events']=self.server.pilot.native_events.status()
             body = json.dumps(state).encode()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -1649,6 +1653,31 @@ class Handler(BaseHTTPRequestHandler):
             return
         with self.server.pilot.lock:
             self.send_page()
+
+    def receive_native_import(self):
+        # This route is ingress-only and called after actual-peer authorization.
+        def respond(status,message):
+            body=json.dumps(message).encode();self.send_response(status)
+            self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)))
+            self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
+            self.end_headers();self.wfile.write(body)
+        try:
+            csrf=self.headers.get('X-ADR-CSRF','')
+            if not csrf.isascii() or not secrets.compare_digest(csrf,self.server.pilot.csrf):
+                respond(403,{'error':'Invalid log import request.'});return
+            length=int(self.headers.get('Content-Length','0'))
+            if not 0<length<=MAX_IMPORT or self.headers.get('Content-Type','').split(';')[0]!='text/plain':
+                raise ProtocolError('Choose a plain-text log smaller than 128 KB.')
+            with self.server.pilot.lock:
+                if self.server.pilot.monitoring_busy():raise ProtocolError('Wait for the current operation to finish.')
+            self.connection.settimeout(10);raw=self.rfile.read(length)
+            if len(raw)!=length:raise ProtocolError('Log upload was incomplete.')
+            try:text=raw.decode('utf-8-sig')
+            except UnicodeDecodeError:raise ProtocolError('Use a UTF-8 plain-text log export, not an archive.') from None
+            count=self.server.pilot.native_events.import_text(self.headers.get('X-ADR-Event-Source',''),text)
+            respond(200,{'imported':count})
+        except ProtocolError as exc:respond(400,{'error':str(exc)})
+        except Exception:respond(400,{'error':'Log import could not finish. Existing events were retained.'})
 
     def receive_voice(self):
         # Only called after actual ingress peer authentication. CSRF and explicit
@@ -1685,6 +1714,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.authorized():
             return
+        if urlsplit(self.path).path == '/native-import':
+            self.receive_native_import();return
         if urlsplit(self.path).path == '/voice-transcribe':
             self.receive_voice();return
         try:
@@ -1862,14 +1893,18 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    def terminate(*_):raise SystemExit(0)
+    signal.signal(signal.SIGTERM,terminate)
     server = ThreadingHTTPServer(('0.0.0.0', 8099), Handler)
     server.pilot = Pilot('/data', '/data/options.json')
+    server.pilot.native_events.start()
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.22.1 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.23.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:
         server.pilot.monitor_stop.set()
+        server.pilot.native_events.close()
         server.server_close()
 
 

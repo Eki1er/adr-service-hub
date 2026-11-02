@@ -1,3 +1,12 @@
+## 0.23.0 — development
+
+- Add disabled-by-default source-allowlisted UDP syslog input in the existing app.
+- Retain CEF/syslog messages and explicit text-log imports with separate device/receipt times.
+- Feed recent native events and coverage limits directly into Ask ADR.
+- Add compact source status/history and log import controls, with no new graphs.
+- Include 0.22.1 conversation usability and Araknis polling-blocker fixes.
+- Native forwarding/backfill and live firmware compatibility require on-site acceptance.
+
 ## 0.22.1 — development
 
 - Make daily analysis and voice limits configurable; default to 100 each, 0 unlimited.

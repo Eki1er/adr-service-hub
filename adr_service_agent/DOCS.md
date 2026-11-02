@@ -1,3 +1,125 @@
+# Native device event ingestion — 0.23.0 development
+
+This build includes the unpublished 0.22.1 conversation fixes (configurable
+100/day analysis and voice defaults, no repeated page checkboxes, default readout,
+and Araknis reads allowed during a separate UPS poll). Main remains 0.22.0 until
+publication is approved.
+
+The new collector accepts **device-originated syslog** and explicitly imported
+plain-text exports. It does not configure equipment, scrape OvrC, or download
+historical logs automatically. Native reports and sampled UPS observations stay
+separate in Ask ADR. The collector lives inside the existing Service Agent app.
+
+## Configure on Green
+
+The receiver is off by default and its host UDP port is also disabled by default.
+Enable both intentionally for a client LAN:
+
+```yaml
+native_events_enabled: true
+native_event_sources:
+  - host: 192.168.50.1
+    vendor: unifi
+    name: Gateway
+  - host: 192.168.50.20
+    vendor: ruckus
+    name: Stairs AP
+```
+
+These addresses are examples, not configured client addresses. Add each actual
+sender separately; a Ruckus AP may send from its own IP rather than the master.
+Each entry requires a private IPv4 host, vendor and name. At most 16 sources;
+vendors: unifi, ruckus, wattbox, crestron, control4, sonos, bluos. A vendor entry
+labels a source; it does not make that equipment support syslog automatically.
+
+In the app's Network settings, map container `5514/udp` to an available LAN host
+port, normally 5514. Configure the supported device/controller log destination as
+the Green's LAN IP and that host port, using UDP. Do not point devices at the
+internal ingress URL. Keep this port on the client LAN, not the public Internet.
+No host networking, Supervisor access, second app or additional privilege is used.
+
+UniFi officially supports CEF export in Integration > System Logging / SIEM.
+Start with infrastructure categories such as Internet, Power and System. Whether
+the installed Network version exports over UDP to this listener must be verified
+on the actual controller; no device settings have been changed by development.
+Ruckus Unleashed documents syslog events, but the installed firmware, forwarding
+settings and exact sender addresses need verification before relying on a feed.
+
+The status line shows whether the listener runs and when each configured source
+last delivered a message in this session. **A running listener or quiet source
+is not proof of complete coverage or healthy equipment.** Restarting retains
+history but returns source delivery status to unverified until a new event arrives.
+Container port forwarding and actual source-IP preservation need Green testing.
+
+## Historical exports
+
+In Ask ADR, expand Native device events, choose a configured source and import a
+UTF-8 `.txt` or `.log` excerpt. Limits: 128 KB, 256 nonempty lines, 8192 bytes per
+line. Archives, support bundles, arbitrary binary files and remote URLs are not
+accepted. The import is authenticated by ingress and CSRF and never executes log
+content. Imported source identity is supplied by the user, not authenticated by
+the device. Importing a file does not establish an active feed.
+
+This can accept a plain-text WattBox or other device log once retrieved through
+its supported export path. It cannot obtain the earlier outage by itself. OvrC
+Power Insights history still requires access to OvrC and may smooth brief changes.
+No undocumented WattBox log API or arbitrary SSH filesystem command is introduced.
+Crestron, Control4, Sonos and BluOS live event/log adapters are not implemented in
+this build; their supported export/event mechanisms need separate verification.
+
+## What is retained and sent to Ask ADR
+
+- Configured source identity, vendor label, transport, event name/code/severity
+  where available, redacted message excerpt, device time and receipt time.
+- RFC5424/ISO timestamps with offsets and CEF `rt` values are normalized to UTC.
+  Legacy syslog times without year/timezone stay explicitly unverified. Import
+  time is never presented as the original event time. Future/invalid device
+  timestamps remain unverified; device time is still a device report, not trusted
+  clock synchronization.
+- Generic syslog/text is retained without pretending to parse a manufacturer's
+  entire event catalog. CEF headers and `msg`/`rt` fields receive structured parsing.
+- Configured credentials and common password/token/API-key patterns are redacted
+  before storage. Messages are truncated at 800 characters with a truncation flag.
+  Logs can still contain device names, addresses and other operational data.
+- Local retention: at most 1000 recent messages, 30 days by receipt time and 2 MB
+  serialized history, whichever limit is reached first. Writes are batched at
+  five-second intervals and on shutdown/import; a hard crash can lose that batch.
+  Files are private. Invalid saved history is retained for inspection and blocked.
+- Identical source/time/code/message records with an unambiguous device timestamp
+  are deduplicated; this is a heuristic, not a certified event count. Untimed
+  repeated messages are preserved. No exact outage or complete alert counts are
+  inferred.
+- UDP allows only configured actual source IPs and 20 messages per source per
+  second, with bounded packet sizes and a paced listener. Rejection/drop counts
+  are visible. UDP may lose messages and source IPs can be spoofed; records are
+  untrusted reports and never trigger actions.
+- Ask ADR receives the latest 12 native messages and source coverage through its
+  existing explicit Ask button and cloud configuration gate. It currently does
+  not search all retained history automatically. The UI displays the latest 20.
+  Native message instructions are ignored; model output has no tools.
+
+Current sampled status remains useful for “what is happening now?” Native logs
+are primary evidence of reported events; neither replaces functional testing.
+Correlation is a possible relationship, not proof of causation. No automatic
+resets, support submissions, cloud log forwarding or Proxmox changes are made.
+
+## Validation and acceptance
+
+286 Python tests and the dashboard/voice Node checks pass offline. They cover
+configuration, disabled/no-bind behavior, source allowlisting, CEF/time parsing,
+legacy timestamps, imports/CSRF, redaction, retention/rate bounds, restart/target
+isolation and native evidence in Ask ADR. The actual Green image build, LAN UDP
+forwarding, UniFi/Ruckus message delivery, historical WattBox export and phone
+playback still need live acceptance. The development tests do not configure or
+query client equipment and have not retrieved the earlier outage.
+
+References:
+https://help.ui.com/hc/en-us/articles/33349041044119-UniFi-System-Logs-SIEM-Integration
+https://support.ruckuswireless.com/documents/5921-ruckus-unleashed-200-19-syslog-event-message-reference-guide
+https://help.snapone.com/ovrc-ug/Content/WB-OVRC/Power%20Insights.htm
+
+---
+
 # Conversation usability and switch reads — 0.22.1 development
 
 ## Changed

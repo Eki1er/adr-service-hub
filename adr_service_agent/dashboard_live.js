@@ -161,6 +161,49 @@
     if(!events.length){const p=document.createElement('p');p.textContent='No power events recorded yet.';fragment.append(p);}
     list.replaceChildren(fragment);list.dataset.events=serialized;
   }
+  function renderNative(native){
+    const status=diag('adr-native-status'),panel=diag('adr-native-history'),sources=diag('adr-native-sources'),list=diag('adr-native-list'),select=diag('adr-native-source');
+    if(!status||!panel||!sources||!list||!select)return;
+    status.hidden=panel.hidden=!native?.enabled;if(!native?.enabled)return;
+    status.textContent=native.error||((native.listener_running?'Native log listener running':'Native log listener stopped')+' · Delivery is verified only when messages arrive.');
+    const coverage=native.sources||[],signature=JSON.stringify(coverage);
+    if(sources.dataset.coverage!==signature){
+      const fragment=document.createDocumentFragment();
+      for(const source of coverage){const p=document.createElement('p');p.textContent=source.name+' · '+(source.last_received_at?'Last received '+localDate(source.last_received_at):'Forwarding unverified');fragment.append(p);}
+      sources.replaceChildren(fragment);sources.dataset.coverage=signature;
+    }
+    const options=JSON.stringify(coverage.map(s=>[s.id,s.name]));
+    if(select.dataset.options!==options){
+      const selected=select.value,fragment=document.createDocumentFragment();
+      for(const source of coverage){const option=document.createElement('option');option.value=source.id;option.textContent=source.name;fragment.append(option);}
+      select.replaceChildren(fragment);if(coverage.some(s=>s.id===selected))select.value=selected;select.dataset.options=options;
+    }
+    const events=native.events||[],serialized=JSON.stringify(events);
+    if(list.dataset.events!==serialized){
+      const fragment=document.createDocumentFragment();
+      for(const event of [...events].reverse().slice(0,20)){
+        const p=document.createElement('p');p.textContent=event.source+' · '+(event.device_time?'Device time '+localDate(event.device_time):'Received '+localDate(event.received_at)+'; device time unverified')+' · '+(event.event_name?event.event_name+': ':'')+event.message;fragment.append(p);
+      }
+      if(!events.length){const p=document.createElement('p');p.textContent='No native events received or imported yet.';fragment.append(p);}
+      list.replaceChildren(fragment);list.dataset.events=serialized;
+    }
+  }
+  document.addEventListener('click',async e=>{
+    if(!e.target.closest('#adr-native-import'))return;
+    const button=diag('adr-native-import');if(button.disabled)return;button.disabled=true;
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
+    try{
+      const file=diag('adr-native-file').files[0],source=diag('adr-native-source').value;
+      if(!file||file.size>128*1024||!source)throw new Error('Choose a source and plain-text log smaller than 128 KB.');
+      const response=await fetch('native-import',{method:'POST',credentials:'same-origin',redirect:'error',signal:controller.signal,
+        headers:{'Content-Type':'text/plain;charset=utf-8','X-ADR-CSRF':diag('diag-csrf').value,'X-ADR-Event-Source':source},body:file});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'Import could not finish.');
+      diag('adr-native-import-status').textContent=result.imported+' log lines imported. Device times remain separate from receipt times.';
+      diag('adr-native-file').value='';await diagnosticStatus();
+    }catch(error){diag('adr-native-import-status').textContent=error.name==='AbortError'?'Import timed out. Check recent events before trying again.':error.message;}
+    finally{clearTimeout(timeout);button.disabled=false;}
+  });
+
   let diagnosticPolling=false;
   async function diagnosticStatus(){
     if(!diag('diagnostics')||diagnosticPolling||document.hidden)return;
@@ -172,6 +215,7 @@
       const state=await response.json(),result=state.result||{};
       window.ADRVoice?.update(state);
       renderPower(state.power_monitor);
+      renderNative(state.native_events);
       diag('diag-progress').textContent=state.progress;
       diag('adr-analysis-progress').textContent=!state.cloud_enabled?'Enable Ask ADR in Configuration.':state.progress;
       diag('diag-summary').textContent=state.summary;

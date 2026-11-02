@@ -1,3 +1,10 @@
+## Development: native event ingestion 0.23.0
+
+Adds opt-in native syslog ingestion and explicit text-log imports, with device
+provenance/time and recent events in Ask ADR. Includes 0.22.1 conversation fixes.
+Main remains 0.22.0. Device log forwarding and historical exports are not yet
+connected; see `adr_service_agent/DOCS.md` for limits and live acceptance.
+
 ## Development: conversation usability 0.22.1
 
 Configurable daily limits, fewer checkbox steps, default spoken replies and a fix

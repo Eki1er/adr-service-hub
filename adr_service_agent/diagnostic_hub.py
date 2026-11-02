@@ -28,13 +28,16 @@ def load(path):
         raise DiagnosticError('Saved diagnostics could not be read. Inspect app storage; no data was removed.') from None
 
 
-def evidence(report, options, power=None):
+def evidence(report, options, power=None, native=None):
     """Allowlist small health fields, never options, identifiers or raw consoles."""
-    if not report and not (power and power.get('enabled')): return {}
+    if not report and not (power and power.get('enabled')) and not (native and native.get('enabled')): return {}
     out=import_report(report) if report else {}
     if power and power.get('enabled'):
         out['power_monitor']={k:power.get(k) for k in ('status','checked_at','current','last_verified','poll_interval_seconds','error','limitations')}
         out['power_monitor']['events']=power.get('events',[])[-12:]
+    if native and native.get('enabled'):
+        out['native_events']={k:native.get(k) for k in ('listener_running','started_at','error','sources','rate_dropped','limitations')}
+        out['native_events']['events']=[{k:v[:400] if k=='message' else v for k,v in e.items()} for e in native.get('events',[])[-12:]]
     out['summaries']=[]
     for item in (report or {}).get('checks',[])[:20]:
         snapshot=item.get('snapshot') or {}
@@ -186,7 +189,7 @@ def panels(hub, csrf):
 <div class="toolbar"><button type="button" data-diagnostic="check">Check connectivity</button><select id="diag-subnet" aria-label="Discovery subnet">'''+subnets+'''</select><button type="button" data-diagnostic="discover">Discover devices</button></div>
 <p id="diag-summary"></p><div class="diagnostic-table"><table><thead><tr><th>Target</th><th>Ping</th><th>Latency</th></tr></thead><tbody id="diag-targets"></tbody></table></div><p id="diag-discovery"></p>
 <details id="diagnostic-observed"><summary>Observed devices</summary><div class="diagnostic-table"><table><thead><tr><th>Address</th><th>First seen</th><th>Last seen</th></tr></thead><tbody id="diag-observed"></tbody></table></div></details></section>'''
-    assistant='''<section id="ask-adr"><h2>Ask ADR</h2><p id="adr-power-status" role="status"></p><details id="adr-power-events"><summary>Recent power events</summary><div id="adr-power-event-list"></div></details><form id="adr-question-form"><input type="hidden" id="diag-csrf" value="'''+esc(csrf)+'''">
+    assistant='''<section id="ask-adr"><h2>Ask ADR</h2><p id="adr-native-status" role="status"></p><details id="adr-native-history"><summary>Native device events</summary><div id="adr-native-sources"></div><div id="adr-native-list"></div><label for="adr-native-source">Log source</label><select id="adr-native-source"></select><input id="adr-native-file" type="file" accept="text/plain,.txt,.log"><button type="button" id="adr-native-import">Import log</button><p id="adr-native-import-status" role="status"></p></details><p id="adr-power-status" role="status"></p><details id="adr-power-events"><summary>Recent power events</summary><div id="adr-power-event-list"></div></details><form id="adr-question-form"><input type="hidden" id="diag-csrf" value="'''+esc(csrf)+'''">
 <label for="adr-question">Question</label><textarea id="adr-question" maxlength="1000" placeholder="What needs attention?" rows="3"></textarea>
 <p class="report-caption">Ask ADR sends your question and collected readings to OpenAI.</p>
 <div class="toolbar"><button type="button" id="adr-record">Speak</button><button type="button" id="adr-record-cancel" hidden>Cancel</button><button type="button" data-diagnostic="ask">Ask ADR</button></div>
