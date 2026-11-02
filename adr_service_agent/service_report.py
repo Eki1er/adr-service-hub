@@ -68,6 +68,18 @@ def assess(name, snapshot):
     if name == 'WattBox':
         usable = isinstance(snapshot.get('outlets'), list)
         notes.append('Outlet inventory received. Power state does not verify connected equipment operation.')
+        power=snapshot.get('power_monitor')
+        if power and power.get('enabled'):
+            current=power.get('current')
+            if power.get('status')!='verified' or not current:
+                limits.append('UPS status is unverified. Previous readings do not establish current power status.')
+            elif not current.get('connected'):
+                limits.append('WattBox reports no UPS connected to UPS Link.')
+            else:
+                notes.append('UPS charge '+str(current['charge_percent'])+'%; load '+str(current['load_percent'])+'%; estimated runtime '+str(current['runtime_minutes'])+' minutes.')
+                if current['power_lost']:service.append('UPS reports input power lost; cause and exact transition time are unverified.')
+                if current['battery_health']=='Bad':service.append('UPS reports battery health Bad.')
+            if power.get('error'):limits.append(power['error'])
         off = [str(o.get('number')) + ' ' + str(o.get('label', '')) for o in snapshot.get('outlets', []) if o.get('on') is False]
         if off:
             notes.append('Reported off outlets: ' + '; '.join(off) + '. Expected power states are not configured.')
@@ -201,7 +213,7 @@ def compare(current, previous):
 
 
 def run_checks(jobs, baselines, progress=lambda *_: None, secrets=(), history=(), completed=lambda *_: None):
-    report = {'format': 'adr-service-report-v1', 'agent_version': '0.21.0', 'read_only': True,
+    report = {'format': 'adr-service-report-v1', 'agent_version': '0.22.0', 'read_only': True,
         'started_at': now(), 'completed_at': None, 'checks': [],
         'limitations': ['Verified means the specified read succeeded, not that every device function is healthy.',
             'Checks run sequentially; per-check timestamps differ. No automatic retries or device actions.',

@@ -22,6 +22,9 @@ def ask(options, question, evidence, confirmed, connection_factory=http.client.H
         'Separate observations, possible causes and next checks. Explain uncertainty and timestamps. '
         'An absent ping reply is not proof of an offline device. Do not claim Wi-Fi signal, ISP fault, '
         'equipment recovery or packet-loss trends from short samples. You cannot run tools or change devices. '
+        'For power monitoring, a missing or stale current sample is unverified, even if last_verified looks healthy. '
+        'A UPS input-power-loss flag does not prove a utility outage. Power events have observation times, not exact outage times or durations. '
+        'Do not claim all power events were captured; polls, busy periods and monitoring gaps can miss brief changes. '
         'Use plain text, short paragraphs and at most 150 words unless more detail is requested. No Markdown headings or asterisks. Use device names when supplied; never infer identities from addresses. Use concise plain language without Home Assistant or entity jargon. Never ask for passwords.',
         'input':json.dumps({'question':question,'evidence':evidence},allow_nan=False)}
     body=json.dumps(payload)

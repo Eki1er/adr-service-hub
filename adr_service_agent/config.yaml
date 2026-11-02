@@ -1,5 +1,5 @@
 name: ADR Service Agent
-version: 0.21.0
+version: 0.22.0
 slug: adr_service_agent
 description: Unified monitoring, network diagnostics, Ask ADR, and confirmed outlet
   controls.
@@ -19,6 +19,8 @@ homeassistant_api: true
 hassio_api: false
 host_network: false
 options:
+  ups_monitoring_enabled: false
+  ups_poll_interval_seconds: 15
   allow_outlet_control: false
   unifi_gateway_host: ''
   unifi_gateway_port: 443
@@ -58,6 +60,8 @@ options:
   openai_api_key: ''
   openai_model: ''
 schema:
+  ups_monitoring_enabled: bool?
+  ups_poll_interval_seconds: int(5,300)?
   allow_outlet_control: bool?
   unifi_gateway_host: str?
   unifi_gateway_port: port?

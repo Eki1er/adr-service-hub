@@ -5,6 +5,7 @@ Never uses a shell command, Telnet, or automatic command retries.
 import base64
 import hashlib
 import re
+import math
 import socket
 import time
 from pathlib import Path
@@ -67,6 +68,21 @@ def parse_inventory(model, firmware, count, labels, states):
     ]}
 
 
+def parse_ups(connected,status=None):
+    if connected not in ('0','1'):raise ProtocolError('Invalid UPS connection response.')
+    if connected=='0':return {'connected':False}
+    fields=status.split(',') if isinstance(status,str) else []
+    if len(fields)!=7:raise ProtocolError('Incomplete UPS status response.')
+    try:
+        charge,load,runtime=(float(fields[i]) for i in (0,1,4))
+        if not all(math.isfinite(v) for v in (charge,load,runtime)) or not 0<=charge<=100 or not 0<=load<=100 or not 0<=runtime<=100000:
+            raise ValueError()
+        if fields[2] not in ('Good','Bad') or any(fields[i] not in ('True','False') for i in (3,5,6)):raise ValueError()
+    except ValueError:raise ProtocolError('Invalid UPS status response.') from None
+    return {'connected':True,'charge_percent':charge,'load_percent':load,'battery_health':fields[2],
+        'power_lost':fields[3]=='True','runtime_minutes':runtime,'alarm_enabled':fields[5]=='True','alarm_muted':fields[6]=='True'}
+
+
 class WattBox:
     def __init__(self, config, keys_path):
         self.config = config
@@ -115,7 +131,7 @@ class WattBox:
         return line.decode("ascii", errors="replace").strip()
 
     def query(self, name):
-        if name not in ("Model", "Firmware", "OutletCount", "OutletName", "OutletStatus"):
+        if name not in ("Model", "Firmware", "OutletCount", "OutletName", "OutletStatus", "UPSConnection", "UPSStatus"):
             raise ValueError("Unsupported query")
         self.channel.sendall(f"?{name}\n".encode("ascii"))
         deadline = time.monotonic() + 8
@@ -132,6 +148,12 @@ class WattBox:
     def inventory(self):
         return parse_inventory(*(self.query(n) for n in
             ("Model", "Firmware", "OutletCount", "OutletName", "OutletStatus")))
+
+    def ups_status(self):
+        # Never query UPSStatus on a unit that does not report a connected UPS.
+        connected=self.query('UPSConnection')
+        if connected not in ('0','1'):raise ProtocolError('Invalid UPS connection response.')
+        return parse_ups(connected,self.query('UPSStatus') if connected=='1' else None)
 
     def reset(self, outlet):
         return self.set_power(outlet, "RESET")
@@ -154,3 +176,4 @@ class WattBox:
                 raise ProtocolError("WattBox rejected the reboot; no automatic retry")
             if line == "OK":
                 return
+

@@ -19,7 +19,7 @@ def identity(pilot):
 def enabled(pilot):
     if pilot.araknis_options.get('allow_outlet_control') is not True:
         raise ProtocolError('Enable allow_outlet_control in Configuration to use outlet controls.')
-    if any(getattr(pilot,name,False) for name in ('active','service_running','internet_test_running','controller_running','araknis_running','cp4_running','crestron_running','control4_running','bluesound_running','sense_running')):
+    if any(getattr(pilot,name,False) for name in ('ups_running','active','service_running','internet_test_running','controller_running','araknis_running','cp4_running','crestron_running','control4_running','bluesound_running','sense_running')):
         raise ProtocolError('Wait for the current operation to finish.')
 
 

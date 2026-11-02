@@ -1,3 +1,9 @@
+## Development: conversational UPS monitoring 0.22.0
+
+Adds opt-in read-only UPS status, sampled power-event history and direct Ask ADR
+power evidence through the existing WattBox connection. Main remains 0.21.0.
+See `adr_service_agent/DOCS.md` for setup, sampling limits and Green acceptance.
+
 ## Development: Ask ADR voice 0.21.0
 
 Adds optional microphone input, reviewed transcription and spoken replies inside

@@ -6,12 +6,12 @@ function element(id=''){
     append(x){this.children.push(x);},replaceChildren(x){this.children=x?[x]:[];}};
 }
 for(const id of ['diagnostics','ask-adr','diag-progress','adr-analysis-progress','diag-summary',
- 'adr-answer','diag-targets','diag-observed','diag-discovery','adr-question','adr-analysis-consent','diag-csrf','diag-subnet'])elements.set(id,element(id));
+ 'adr-power-status','adr-power-events','adr-power-event-list','adr-answer','diag-targets','diag-observed','diag-discovery','adr-question','adr-analysis-consent','diag-csrf','diag-subnet'])elements.set(id,element(id));
 elements.get('adr-question').value='Check my office';elements.get('adr-analysis-consent').checked=true;
 elements.get('diag-csrf').value='test-csrf';
 const buttons=['check','discover','ask'].map(action=>({...element(),dataset:{diagnostic:action}}));
 const state={progress:'Complete',answer:'<script>literal answer</script>',summary:'1 reply',enabled:true,cloud_enabled:true,
- busy:false,result:{targets:[]},observed:[]};
+ busy:false,result:{targets:[]},observed:[],power_monitor:{enabled:true,status:'verified',current:{connected:true,power_lost:false,charge_percent:90,runtime_minutes:20},events:[]}};
 const document={hidden:false,forms:[],activeElement:null,
  querySelector:()=>null,querySelectorAll:s=>s==='button[data-diagnostic]'?buttons:[],
  getElementById:id=>elements.get(id),createElement:()=>element(),createDocumentFragment:()=>element(),
@@ -28,6 +28,7 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(elements.get('adr-question').value,'Check my office');
  assert.equal(elements.get('adr-analysis-consent').checked,true);
  assert.equal(elements.get('adr-answer').textContent,state.answer);
+ assert.match(elements.get('adr-power-status').textContent,/UPS input power available/);
  for(const tick of intervals)tick();await flush();
  assert.equal(calls.some(c=>c.options.method==='POST'),false);
  const button=buttons[2];for(const fn of handlers.click)await fn({target:{closest:()=>button}});

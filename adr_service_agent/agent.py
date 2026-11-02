@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 from service_report import run_checks, SkipCheck
 from diagnostic_hub import Hub as DiagnosticHub, panels as diagnostic_panels, evidence as diagnostic_evidence
 from network_diagnostics import DiagnosticError
+from power_events import PowerJournal, identity as power_identity
 from monitoring import MonitoringSchedule
 from presentation import present_html
 from ui_icons import icon
@@ -217,15 +218,19 @@ class Pilot:
             except (ValueError, KeyError, OSError, TypeError):
                 self.cooldown_error = True
 
+        interval=self.araknis_options.get('ups_poll_interval_seconds',15)
+        self.ups_interval=interval if type(interval) is int and 5<=interval<=300 else 15
+        self.ups_running=False;self.ups_next_due=time.time()+60
+        self.power_journal=PowerJournal(self.data/'power_events.json',self.ups_interval)
         self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
-            lambda: diagnostic_evidence(self.service_report, self.araknis_options))
+            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status()))
         self.monitor = MonitoringSchedule(self.araknis_options, self.data / 'monitoring_state.json')
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
         self.monitor_active = False
 
     def monitoring_busy(self):
-        return bool(getattr(self, "diagnostics", None) and self.diagnostics.busy) or any((self.service_running, self.internet_test_running, self.controller_running,
+        return bool(getattr(self, "diagnostics", None) and self.diagnostics.busy) or any((self.ups_running, self.service_running, self.internet_test_running, self.controller_running,
             bool(self.power_pending and time.monotonic()-self.power_pending["created"]<=120), self.active, self.araknis_running, self.cp4_running, self.crestron_running,
             self.control4_running, self.bluesound_running, self.sense_running)) or any(
                 time.monotonic() - item[0] <= 120 for item in self.confirmations.values())
@@ -240,13 +245,14 @@ class Pilot:
             return self.monitor.tick(dispatch, busy=self.monitoring_busy())
 
     def start_monitoring(self):
-        if not self.monitor.enabled or self.monitor_active:
+        if (not self.monitor.enabled and self.araknis_options.get('ups_monitoring_enabled') is not True) or self.monitor_active:
             return
         self.monitor_active = True
         def loop():
             try:
                 while not self.monitor_stop.wait(5):
                     self.monitoring_tick()
+                    self.power_tick()
             finally:
                 self.monitor_active = False
         self.monitor_thread = threading.Thread(target=loop, daemon=True, name='adr-monitor')
@@ -255,6 +261,52 @@ class Pilot:
         except Exception:
             self.monitor_active = False
             raise
+
+    def power_target(self):
+        return power_identity(self.araknis_options,self.data/'known_hosts')
+
+    def power_status(self):
+        if self.araknis_options.get('ups_monitoring_enabled') is not True:
+            return {'enabled':False,'status':'disabled','events':[],'current':None}
+        try:return self.power_journal.status(self.power_target())
+        except OSError:return {'enabled':True,'status':'unverified','events':[],'current':None,'error':'WattBox trust information could not be read.'}
+
+    def read_ups(self,box):
+        try:
+            sample=box.ups_status()
+            self.power_journal.observe(self.power_target(),sample)
+        except Exception:
+            self.power_journal.unverified()
+            raise ProtocolError('UPS status could not be verified. Check UPS Link connection and firmware support; no retry was made.') from None
+        return self.power_status()
+
+    def power_tick(self):
+        with self.lock:
+            if self.araknis_options.get('ups_monitoring_enabled') is not True or time.time()<self.ups_next_due or self.monitoring_busy():return
+            # Share the existing monitor loop; do not start a second scheduler.
+            try:self.start_power_check()
+            except ProtocolError:self.ups_next_due=time.time()+300
+
+    def start_power_check(self):
+        if self.araknis_options.get('ups_monitoring_enabled') is not True:
+            raise ProtocolError('Enable UPS monitoring in Configuration first.')
+        if self.monitoring_busy():raise ProtocolError('Wait for the current check or power action to finish.')
+        if self.config is None or not (self.data/'known_hosts').exists():
+            raise ProtocolError('Configure WattBox and approve its SSH identity first.')
+        if self.power_journal.error:raise ProtocolError(self.power_journal.error)
+        self.ups_running=True;self.ups_next_due=time.time()+self.ups_interval
+        def run():
+            try:
+                with self.box() as box:self.read_ups(box)
+            except Exception:
+                self.power_journal.unverified()
+                with self.lock:self.ups_next_due=time.time()+300
+            finally:
+                with self.lock:self.ups_running=False
+        try:threading.Thread(target=run,daemon=True,name='adr-ups-read').start()
+        except Exception:
+            self.ups_running=False
+            raise ProtocolError('UPS check could not start.') from None
 
     def collect_unifi_dashboard(self):
         snapshot = collect_unifi(self.unifi_selection.get('entry_id', ''), self.unifi_selection.get('device_id', ''))
@@ -321,7 +373,11 @@ class Pilot:
                 raise SkipCheck('Configure WattBox and approve its SSH identity using its individual check first.')
             # Inventory only. Never call check(), create a confirmation, or reboot.
             with self.box() as box:
-                return box.inventory()
+                inventory=box.inventory()
+                if self.araknis_options.get('ups_monitoring_enabled') is True:
+                    try:inventory['power_monitor']=self.read_ups(box)
+                    except ProtocolError:inventory['power_monitor']=self.power_status()
+                return inventory
 
         def target_id(prefix, keyfile):
             pin = (self.data / keyfile).read_text() if (self.data / keyfile).exists() else ''
@@ -394,7 +450,7 @@ class Pilot:
             raise ProtocolError('Confirm or cancel the pending outlet action first.')
         if self.service_running:
             return
-        if any((self.araknis_running, self.cp4_running, self.crestron_running,
+        if any((self.ups_running, self.araknis_running, self.cp4_running, self.crestron_running,
                 self.control4_running, self.bluesound_running, self.sense_running, self.controller_running, self.internet_test_running, self.active)):
             raise ProtocolError('Wait for the current check or power action to finish before running all checks.')
         jobs = self.service_jobs()
@@ -973,7 +1029,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += '<meta name="adr-refresh" content="3">'
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.21.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.22.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.service_report
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1578,7 +1634,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             return
         if urlsplit(self.path).path == '/diagnostic-state':
-            body = json.dumps(self.server.pilot.diagnostics.status()).encode()
+            state=self.server.pilot.diagnostics.status()
+            state['power_monitor']=self.server.pilot.power_status()
+            body = json.dumps(state).encode()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(body)))
@@ -1662,7 +1720,12 @@ class Handler(BaseHTTPRequestHandler):
                     raise ProtocolError('Combined checks are running. Refresh results or wait for completion before another action.')
                 if getattr(getattr(pilot, 'diagnostics', None), 'busy', False) and action not in ('refresh', 'service-report'):
                     raise ProtocolError('Wait for diagnostics to finish.')
-                if action.startswith('diagnostic-'):
+                if getattr(pilot, 'ups_running', False) and action not in ('refresh', 'service-report'):
+                    raise ProtocolError('A power status check is running. Wait for it to finish.')
+                if action == 'ups-read':
+                    pilot.start_power_check()
+                    self.send_page()
+                elif action.startswith('diagnostic-'):
                     if pilot.monitoring_busy():
                         raise ProtocolError('Wait for the current check or power action to finish.')
                     try:
@@ -1802,7 +1865,7 @@ def main():
     server = ThreadingHTTPServer(('0.0.0.0', 8099), Handler)
     server.pilot = Pilot('/data', '/data/options.json')
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.21.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.22.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:

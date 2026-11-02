@@ -1,3 +1,88 @@
+# UPS monitoring and conversational power history — 0.22.0 development
+
+One Service Agent app now has optional read-only UPS polling through the existing
+WattBox SSH connection and approved host identity. It uses documented
+`?UPSConnection` and (only when connection=1) `?UPSStatus` queries. The protocol
+fields are battery charge/load percentages, battery health, input-power-lost flag,
+estimated runtime in minutes, and alarm enabled/muted state. It never sends UPS
+settings, shutdown, alarm, load-shedding or battery-test commands.
+
+## Enable and verify
+
+- Set `ups_monitoring_enabled: true`, save and restart Service Agent only.
+- `ups_poll_interval_seconds` defaults to 15 and accepts 5–300. The app wakes its
+  existing monitor loop every five seconds, so actual intervals are approximate.
+- Run All Checks to inspect the first response. Outlet inventory is preserved if
+  UPS status is unsupported, incomplete or fails. No UPSStatus request is sent
+  unless UPSConnection explicitly reports a connected UPS.
+- Ask ADR: “Are there any power issues?” or “What power events were observed?”
+  Ask ADR receives current power status directly, including when the last full
+  service report is older. The latest 12 events are included in cloud analysis
+  only after the existing user confirmation.
+- Ask ADR displays a brief UPS line and expandable recent event list. No new
+  graphs or separate app are required. Observed times use the viewer's time zone.
+
+## Sampling and event semantics
+
+The fast poll runs without an open dashboard and may run even if recurring full
+system checks are disabled. It uses the same operation guards and monitor loop,
+with a 60-second startup delay. Full reports and pending device confirmations,
+checks, voice transcription and power verification defer fast polls. A failed
+fast read backs off for five minutes; there is no immediate command retry.
+The next scheduled sample is a new observation, never a repeated power action.
+
+Transitions are recorded as *observed* input power loss or availability. The first
+sample establishes a baseline and does not invent an outage. Startup, a failed
+read or an excessive interval between samples marks a coverage gap. A later
+sample after a gap is recorded as an observation after a gap, rather than an exact
+restoration event. Loss of UPS communication is never interpreted as loss of AC.
+The UPS input-power flag cannot establish whether the cause was utility failure,
+a voltage fluctuation or a disconnected input cable.
+
+**Polling cannot guarantee capture of very brief interruptions.** Events wholly
+between polls, during other operations or while Green/network equipment is down
+may be missed. No exact start time, duration or complete outage count is claimed.
+This build does not download historical OvrC events or retroactively recover the
+previous outage. Source event retrieval or another verified event feed remains
+necessary for complete brief-event coverage.
+
+## Persistence, trust and existing controls
+
+`/data/power_events.json` holds at most 512 events from 30 days and the most recent
+successful sample. State-change events save immediately; unchanged samples save
+at most once per five minutes to limit routine flash writes. On restart, saved
+history is retained but current status remains unverified until a fresh read.
+Samples older than twice the configured interval (minimum 45 seconds) become
+unverified. Failed reads also invalidate current status immediately; previous
+successful data remains explicitly historical.
+
+History is isolated by a hash of WattBox host, SSH port and approved host-key
+file. A changed target starts a new history; previous-target events are excluded.
+Invalid saved history is blocked for local review and is not deleted or repaired
+silently. Files are private and contain normalized fields, never raw console
+responses, passwords or API keys. Unsupported results remain unverified.
+
+Existing outlet actions remain explicit and confirmed. This version adds no
+voice execution, automatic resets or remote Proxmox access. UniFi alert/event
+ingestion and the existing Proxmox voice-control connection remain separate next
+steps; current UniFi speed and AP collectors are unchanged.
+
+## Validation and rollout
+
+265 Python tests plus the existing Node UI checks pass offline. Coverage includes
+conditional queries, strict field validation, state transitions, restart/gap
+semantics, staleness, target isolation, corrupt data, file permissions, bounded
+retention, reduced writes, failed reads, deferred jobs and unchanged controls.
+Live UPS firmware compatibility, Docker image building and the actual UPS Link
+read have not been verified from development tooling. Verify a read on Green
+before relying on alerts. No actual outage or battery transfer was triggered.
+
+Protocol reference: Snap One WattBox Integration Protocol (UPSConnection and
+UPSStatus):
+https://www.snapav.com/wcsstore/ExtendedSitesCatalogAssetStore/attachments/documents/PowerManagement/SupportDocuments/SnapAV_Wattbox_API_V2.2.pdf
+
+---
+
 # Ask ADR voice — 0.21.0 development build
 
 Voice is part of the existing Service Agent app. It does not install another app

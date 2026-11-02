@@ -1,3 +1,12 @@
+## 0.22.0 — development
+
+- Add optional read-only UPS link/status polling using the approved WattBox SSH connection.
+- Persist bounded power observations and state changes with explicit coverage gaps.
+- Feed current UPS status and recent events directly into Ask ADR.
+- Show a concise power status line and expandable history; no extra graphs.
+- Preserve outlet inventory on failed UPS reads and existing action confirmations.
+- Default new polling off; firmware compatibility still requires live verification.
+
 ## 0.21.0 — development
 
 - Add opt-in push-to-talk and audio-file transcription inside Ask ADR.
