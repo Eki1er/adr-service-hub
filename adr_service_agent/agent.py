@@ -226,7 +226,7 @@ class Pilot:
         self.power_journal=PowerJournal(self.data/'power_events.json',self.ups_interval)
         self.native_events=NativeEvents(self.data/'native_events.json',self.araknis_options)
         self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
-            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status(), self.native_events.status()))
+            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status(), self.native_events.status(), {'Araknis':self.araknis_diagnostics}))
         self.monitor = MonitoringSchedule(self.araknis_options, self.data / 'monitoring_state.json')
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
@@ -1032,7 +1032,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += '<meta name="adr-refresh" content="3">'
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.23.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.23.1</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.service_report
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1899,7 +1899,7 @@ def main():
     server.pilot = Pilot('/data', '/data/options.json')
     server.pilot.native_events.start()
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.23.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.23.1 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:

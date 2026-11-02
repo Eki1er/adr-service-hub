@@ -137,30 +137,6 @@
     body.replaceChildren(fragment);body.dataset.rows=serialized;
   }
   const localDate=value=>{const d=new Date(value);return value&&!Number.isNaN(d.valueOf())?new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'}).format(d):'Unverified';};
-  function renderPower(power){
-    const line=diag('adr-power-status'),details=diag('adr-power-events'),list=diag('adr-power-event-list');
-    if(!line||!details||!list)return;
-    line.hidden=details.hidden=!power?.enabled;
-    if(!power?.enabled)return;
-    const current=power.current;
-    let label='UPS status unverified';
-    if(power.status==='verified'&&current){
-      label=current.connected?(current.power_lost?'UPS reports input power lost':'UPS input power available')+' · Battery '+current.charge_percent+'% · Estimated runtime '+current.runtime_minutes+' min':'UPS Link reports no connected UPS';
-    }
-    if(current?.battery_health==='Bad')label+=' · Battery health Bad';
-    line.textContent=label+(power.checked_at?' · Checked '+localDate(power.checked_at):'')+(power.error?' · '+power.error:'');
-    const events=power.events||[],serialized=JSON.stringify(events);
-    if(list.dataset.events===serialized)return;
-    const names={initial_observation:'First observation',observation_after_gap:'Observation after a monitoring gap',input_power_lost:'Input power loss observed',input_power_restored:'Input power available again',ups_link_changed:'UPS connection changed',battery_health_changed:'Battery health changed',monitor_unverified:'UPS monitoring unverified'};
-    const fragment=document.createDocumentFragment();
-    for(const event of [...events].reverse().slice(0,12)){
-      const p=document.createElement('p');
-      p.textContent=localDate(event.observed_at)+' · '+(names[event.kind]||'Power observation')+' · '+({input_power_lost:'Input power lost',input_power_available:'Input power available',ups_not_connected:'UPS not connected',unverified:'Unverified'}[event.state]||'Unverified');
-      fragment.append(p);
-    }
-    if(!events.length){const p=document.createElement('p');p.textContent='No power events recorded yet.';fragment.append(p);}
-    list.replaceChildren(fragment);list.dataset.events=serialized;
-  }
   function renderNative(native){
     const status=diag('adr-native-status'),panel=diag('adr-native-history'),sources=diag('adr-native-sources'),list=diag('adr-native-list'),select=diag('adr-native-source');
     if(!status||!panel||!sources||!list||!select)return;
@@ -214,7 +190,6 @@
       if(!response.ok)throw new Error();
       const state=await response.json(),result=state.result||{};
       window.ADRVoice?.update(state);
-      renderPower(state.power_monitor);
       renderNative(state.native_events);
       diag('diag-progress').textContent=state.progress;
       diag('adr-analysis-progress').textContent=!state.cloud_enabled?'Enable Ask ADR in Configuration.':state.progress;

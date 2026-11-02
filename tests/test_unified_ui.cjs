@@ -6,7 +6,7 @@ function element(id=''){
     append(x){this.children.push(x);},replaceChildren(x){this.children=x?[x]:[];}};
 }
 for(const id of ['diagnostics','ask-adr','diag-progress','adr-analysis-progress','diag-summary',
- 'adr-power-status','adr-power-events','adr-power-event-list','adr-native-status','adr-native-history','adr-native-sources','adr-native-list','adr-native-source','adr-native-file','adr-native-import','adr-native-import-status','adr-answer','diag-targets','diag-observed','diag-discovery','adr-question','diag-csrf','diag-subnet'])elements.set(id,element(id));
+ 'adr-native-status','adr-native-history','adr-native-sources','adr-native-list','adr-native-source','adr-native-file','adr-native-import','adr-native-import-status','adr-answer','diag-targets','diag-observed','diag-discovery','adr-question','diag-csrf','diag-subnet'])elements.set(id,element(id));
 elements.get('adr-question').value='Check my office';
 elements.get('diag-csrf').value='test-csrf';
 const buttons=['check','discover','ask'].map(action=>({...element(),dataset:{diagnostic:action}}));
@@ -27,7 +27,6 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  await flush();assert.equal(calls.length,1);assert.equal(calls[0].url,'diagnostic-state');
  assert.equal(elements.get('adr-question').value,'Check my office');
  assert.equal(elements.get('adr-answer').textContent,state.answer);
- assert.match(elements.get('adr-power-status').textContent,/UPS input power available/);
  assert.match(elements.get('adr-native-status').textContent,/Delivery is verified only/);
  for(const tick of intervals)tick();await flush();
  assert.equal(calls.some(c=>c.options.method==='POST'),false);

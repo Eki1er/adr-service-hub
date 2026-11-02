@@ -1,3 +1,25 @@
+# Latest Araknis evidence and streamlined Ask ADR — 0.23.1 development
+
+Ask ADR now merges a newer individual Araknis diagnostic snapshot into its
+analysis evidence without changing the combined report. Original reading times
+and the source (individual diagnostic versus combined report) are retained. It
+uses the newer timestamp, excludes raw console output and does not treat SSH
+login/help as a health diagnostic. This fixes the case where successful
+individual diagnostics appeared in the UI while analysis still had no readings.
+
+The dedicated UPS status and Recent power events section are removed from Ask
+ADR. Power evidence remains available when relevant, and native device events
+stay in the shared event history. Responses prioritize the actual question and
+do not add a routine Power heading. Native forwarding and historical source
+retrieval are unchanged: the earlier real UPS switchover still requires its
+retained WattBox/OvrC source record; no synthetic outage entry is added.
+
+290 Python tests passed, including newer individual snapshots, timestamp ordering,
+original-report preservation, safe excerpts and removal of the power UI section.
+Main remains 0.23.0 pending publication. Existing Node UI checks also pass.
+
+---
+
 # Native device event ingestion — 0.23.0 development
 
 This build includes the unpublished 0.22.1 conversation fixes (configurable
