@@ -249,7 +249,7 @@ class Unified(unittest.TestCase):
         self.assertFalse(self.pilot.diagnostics.busy)
         self.assertEqual(self.pilot.diagnostics.quota['count'],1)
         self.pilot.diagnostics.last_started=0
-        self.pilot.diagnostics.quota['count']=10
+        self.pilot.diagnostics.quota['count']=100
         with self.assertRaises(diag.DiagnosticError):self.pilot.diagnostics.start('ask',{'question':'check','confirm':'yes'})
 
     def handler(self,path,method='GET',body='',peer='172.30.32.2'):

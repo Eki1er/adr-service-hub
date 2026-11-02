@@ -194,13 +194,14 @@
       if(button.dataset.diagnostic==='discover')body.set('subnet',diag('diag-subnet').value);
       if(button.dataset.diagnostic==='ask'){
         body.set('question',diag('adr-question').value);
-        body.set('confirm',diag('adr-analysis-consent').checked?'yes':'no');
+        body.set('confirm','yes');
       }
       const response=await fetch('diagnostic-'+button.dataset.diagnostic,{method:'POST',body,credentials:'same-origin',redirect:'error',signal:controller.signal});
       if(response.status!==202){
         const doc=new DOMParser().parseFromString(await response.text(),'text/html');
         throw new Error(doc.querySelector('.notice p')?.textContent||'Request could not start.');
       }
+      if(button.dataset.diagnostic==='ask')window.ADRVoice?.expectAnswer();
       diagnosticSubmitting=false;await diagnosticStatus();
     }catch(error){
       diagnosticSubmitting=false;await diagnosticStatus();

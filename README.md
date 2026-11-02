@@ -1,3 +1,9 @@
+## Development: conversation usability 0.22.1
+
+Configurable daily limits, fewer checkbox steps, default spoken replies and a fix
+for Araknis reads blocked by UPS polling. Main remains 0.22.0. See the current
+`adr_service_agent/DOCS.md` section for validation and historical power-log limits.
+
 ## Development: conversational UPS monitoring 0.22.0
 
 Adds opt-in read-only UPS status, sampled power-event history and direct Ask ADR

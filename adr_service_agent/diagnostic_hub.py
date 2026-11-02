@@ -5,6 +5,7 @@ No second server, external command interface or model-driven device actions.
 import html
 import json
 import re
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -46,10 +47,15 @@ def evidence(report, options, power=None):
     return redact(out,private)
 
 
+def daily_limit(options,key):
+    value=options.get(key,100)
+    return value if type(value) is int and 0<=value<=10000 else 100
+
+
 class Hub:
     def __init__(self, data, options, report_provider):
         self.data=Path(data)/'diagnostics'; self.options=options;self.report_provider=report_provider
-        self.lock=threading.Lock();self.busy=False;self.progress='Ready';self.answer='';self.last_started=0
+        self.lock=threading.Lock();self.busy=False;self.progress='Ready';self.answer='';self.last_started=0;self.answer_id=''
         self.transcript='';self.transcript_id='';self.voice_quota={};self.last_voice_started=0
         self.error='';self.settings={'networks':[],'targets':[]};self.history={};self.quota={};self.result={}
         try:
@@ -67,7 +73,7 @@ class Hub:
             return {'busy':self.busy,'blocked':bool(self.error),'progress':self.error or self.progress,
                 'transcript':self.transcript,'transcript_id':self.transcript_id,
                 'voice_enabled':self.options.get('voice_enabled') is True,
-                'answer':self.answer,'result':self.result,'observed':self.history.get('observed',[]),
+                'answer':self.answer,'answer_id':self.answer_id,'result':self.result,'observed':self.history.get('observed',[]),
                 'summary':summary(self.result) if self.result else 'No local checks yet.',
                 'enabled':self.options.get('diagnostics_enabled') is True,
                 'cloud_enabled':self.options.get('cloud_analysis_enabled') is True}
@@ -84,8 +90,10 @@ class Hub:
             if time.time()-self.last_voice_started<10:raise DiagnosticError('Wait ten seconds between diagnostic requests.')
             day=time.strftime('%Y-%m-%d',time.gmtime())
             count=self.voice_quota.get('count',0) if self.voice_quota.get('day')==day else 0
-            if type(count) is not int or not 0<=count<10:
-                raise DiagnosticError('Daily voice limit reached (10 attempts, UTC day).')
+            limit=daily_limit(self.options,'daily_voice_limit')
+            if type(count) is not int or count<0:raise DiagnosticError('Saved voice counter is invalid. Inspect app storage.')
+            if limit and count>=limit:
+                raise DiagnosticError('Daily voice limit reached ('+str(limit)+' attempts, UTC day). Increase daily_voice_limit in Configuration.')
             quota={'day':day,'count':count+1}
             save(self.data/'voice_attempts.json',quota);self.voice_quota=quota
             self.busy=True;self.last_voice_started=time.time();self.progress='Transcribing question'
@@ -144,7 +152,9 @@ class Hub:
                     raise DiagnosticError('Readings exceed the analysis limit. Run a focused local check first.')
                 day=time.strftime('%Y-%m-%d',time.gmtime())
                 count=self.quota.get('count',0) if self.quota.get('day')==day else 0
-                if type(count) is not int or not 0<=count<10:raise DiagnosticError('Daily analysis limit reached (10 attempts, UTC day).')
+                limit=daily_limit(self.options,'daily_analysis_limit')
+                if type(count) is not int or count<0:raise DiagnosticError('Saved analysis counter is invalid. Inspect app storage.')
+                if limit and count>=limit:raise DiagnosticError('Daily analysis limit reached ('+str(limit)+' attempts, UTC day). Increase daily_analysis_limit in Configuration.')
                 quota={'day':day,'count':count+1};save(self.data/'analysis_attempts.json',quota);self.quota=quota
             self.busy=True;self.last_started=time.time();self.progress='Starting'
         def progress(text):
@@ -154,7 +164,7 @@ class Hub:
                 if action=='ask':
                     progress('Reviewing readings')
                     answer=ask(self.options,fields['question'],collected,True)
-                    with self.lock:self.answer=display_text(answer)
+                    with self.lock:self.answer=display_text(answer);self.answer_id=secrets.token_urlsafe(12)
                 else:
                     result=check(self.settings,progress=progress) if action=='check' else discover(self.settings,fields['subnet'],progress=progress)
                     self.record(result)
@@ -178,9 +188,9 @@ def panels(hub, csrf):
 <details id="diagnostic-observed"><summary>Observed devices</summary><div class="diagnostic-table"><table><thead><tr><th>Address</th><th>First seen</th><th>Last seen</th></tr></thead><tbody id="diag-observed"></tbody></table></div></details></section>'''
     assistant='''<section id="ask-adr"><h2>Ask ADR</h2><p id="adr-power-status" role="status"></p><details id="adr-power-events"><summary>Recent power events</summary><div id="adr-power-event-list"></div></details><form id="adr-question-form"><input type="hidden" id="diag-csrf" value="'''+esc(csrf)+'''">
 <label for="adr-question">Question</label><textarea id="adr-question" maxlength="1000" placeholder="What needs attention?" rows="3"></textarea>
-<label class="analysis-consent"><input type="checkbox" id="adr-analysis-consent"> Send my question and collected readings to OpenAI. API usage applies.</label>
+<p class="report-caption">Ask ADR sends your question and collected readings to OpenAI.</p>
 <div class="toolbar"><button type="button" id="adr-record">Speak</button><button type="button" id="adr-record-cancel" hidden>Cancel</button><button type="button" data-diagnostic="ask">Ask ADR</button></div>
-<label class="analysis-consent"><input type="checkbox" id="adr-voice-consent"> Send my recording to OpenAI for transcription. API usage applies.</label>
+<p class="report-caption">Speak or Transcribe sends your recording to OpenAI. API usage applies.</p>
 <div class="voice-file"><label for="adr-audio-file">Or choose a recording</label><input id="adr-audio-file" type="file" accept="audio/*,.m4a,.mp4,.webm,.wav,.mp3"><button type="button" id="adr-transcribe-file">Transcribe</button></div><p id="adr-transcript"></p><button type="button" id="adr-use-transcript" hidden>Use transcript</button><p id="adr-voice-status" role="status" aria-live="polite"></p></form>
-<label class="analysis-consent"><input type="checkbox" id="adr-read-replies"> Read replies aloud</label><div class="toolbar voice-output"><button type="button" id="adr-read-answer">Read answer</button><button type="button" id="adr-stop-reading">Stop reading</button></div><p id="adr-analysis-progress" role="status"></p><div id="adr-answer" aria-live="polite"></div></section>'''
+<div class="toolbar voice-output"><button type="button" id="adr-read-answer">Read answer</button><button type="button" id="adr-stop-reading">Stop reading</button></div><p id="adr-analysis-progress" role="status"></p><div id="adr-answer" aria-live="polite"></div></section>'''
     return network,assistant

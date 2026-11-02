@@ -1,3 +1,11 @@
+## 0.22.1 — development
+
+- Make daily analysis and voice limits configurable; default to 100 each, 0 unlimited.
+- Remove repeated page checkboxes; explicit Ask/Speak/Transcribe buttons send requests.
+- Read new replies aloud by default, keeping manual Read and Stop controls.
+- Allow manual Araknis read-only operations during a separate WattBox UPS poll.
+- Keep cloud/voice configuration gates and all outlet confirmations intact.
+
 ## 0.22.0 — development
 
 - Add optional read-only UPS link/status polling using the approved WattBox SSH connection.

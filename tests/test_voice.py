@@ -90,7 +90,7 @@ class Integration(unittest.TestCase):
         h=self.pilot.diagnostics
         with self.assertRaises(DiagnosticError):h.start_voice(AUDIO,'audio/mp4',True,'recording',Mock(side_effect=RuntimeError('secret')))
         self.assertFalse(h.busy);self.assertEqual(h.voice_quota['count'],1);self.assertEqual(h.quota,{})
-        h.last_voice_started=0;h.voice_quota['count']=10
+        h.last_voice_started=0;h.voice_quota['count']=100
         with patch.object(hub,'transcribe') as transcribe:
             with self.assertRaises(DiagnosticError):h.start_voice(AUDIO,'audio/mp4',True,'recording',self.inline)
             transcribe.assert_not_called()
@@ -119,7 +119,7 @@ class Integration(unittest.TestCase):
     def test_voice_controls_script_hash_and_no_key_in_page(self):
         import base64,hashlib
         text=page(self.pilot)
-        for name in ('adr-record','adr-read-answer','adr-voice-consent','adr-use-transcript'):self.assertIn('id="'+name+'"',text)
+        for name in ('adr-record','adr-read-answer','adr-use-transcript'):self.assertIn('id="'+name+'"',text)
         self.assertNotIn('fake-test-key',text)
         self.assertEqual(VIEW_SCRIPT_HASH,base64.b64encode(hashlib.sha256(VIEW_SCRIPT.encode()).digest()).decode())
         self.assertIn("voice-transcribe",VIEW_SCRIPT)

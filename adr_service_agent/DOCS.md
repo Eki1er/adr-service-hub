@@ -1,3 +1,58 @@
+# Conversation usability and switch reads — 0.22.1 development
+
+## Changed
+
+- Daily analysis and transcription defaults increase from 10 to 100 each. Set
+  `daily_analysis_limit` and `daily_voice_limit` independently from 0–10000;
+  **0 disables that local daily cap**. Existing counters are retained, so a count
+  of 10 no longer blocks after upgrading. Failed attempts still count. API
+  billing/provider limits remain separate and no cloud call runs automatically.
+- Ask ADR, Speak and Transcribe require no extra page checkbox. Existing
+  `cloud_analysis_enabled` and `voice_enabled` configuration gates remain.
+  Clicking Ask ADR explicitly sends that question and collected readings;
+  Speak/Transcribe explicitly sends that recording after stop/upload. Microphone
+  permission remains browser-controlled. The page retains a short disclosure.
+- The read-replies checkbox is removed. New answers to a question submitted in
+  the current page are read aloud by default when the browser allows playback.
+  Old answers do not play merely because the page opens. Read answer and Stop
+  reading remain; typed edits and transcript review are retained.
+- A UPS poll no longer rejects manual Araknis identity, login/help, diagnostic,
+  discovery or report reads. They use a separate device/session. UPS polls still
+  defer once another operation starts; outlet actions remain protected. Full
+  service checks and pending outlet confirmations still block conflicting work.
+  This fixes a possible app-side blocker, not an independently verified switch
+  authentication issue. Wrong credentials, changed keys and connectivity errors
+  still require the actual error message and device-side verification.
+
+## Historical power logs
+
+The ADR power journal begins with enabled observations and cannot reconstruct an
+outage before monitoring, or an event wholly between polls. No historical-log
+request has been added to the WattBox SSH client: documented status queries
+return current values, not a historical event list.
+
+OvrC Power Insights has its own UPS Power lost history and may contain older
+source data. Its graphs use periodic summarized uploads and can smooth short
+blips, so absence is not proof that no event occurred. Local WattBox firmware
+also documents device logs/export, but which entries survive and whether the
+specific outage is present require inspecting the actual device or an export.
+Do not invent an HTTP endpoint, retrieve arbitrary system files, clear logs or
+change log settings. No live history has been downloaded by this build.
+
+References:
+https://help.snapone.com/ovrc-ug/Content/WB-OVRC/Power%20Insights.htm
+https://help.snapone.com/wb-8x0-fw/Content/FW%20RN/8x0/8x0%20series%20FW%20RN.htm
+
+## Validation
+
+269 Python tests and the Node voice/dashboard checks pass offline, including
+configurable quotas, existing-counter continuity, zero-cap behavior, removed
+checkboxes, explicit button submissions, automatic readout and the Araknis/UPS
+regression guard. Live browser audio, real switch login and source log retrieval
+remain unverified. Main remains 0.22.0 pending publication approval.
+
+---
+
 # UPS monitoring and conversational power history — 0.22.0 development
 
 One Service Agent app now has optional read-only UPS polling through the existing

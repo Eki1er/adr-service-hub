@@ -1,5 +1,5 @@
 name: ADR Service Agent
-version: 0.22.0
+version: 0.22.1
 slug: adr_service_agent
 description: Unified monitoring, network diagnostics, Ask ADR, and confirmed outlet
   controls.
@@ -56,6 +56,8 @@ options:
   targets: []
   dns_name: example.com
   voice_enabled: false
+  daily_analysis_limit: 100
+  daily_voice_limit: 100
   cloud_analysis_enabled: false
   openai_api_key: ''
   openai_model: ''
@@ -99,6 +101,8 @@ schema:
   - str
   dns_name: str?
   voice_enabled: bool?
+  daily_analysis_limit: int(0,10000)?
+  daily_voice_limit: int(0,10000)?
   cloud_analysis_enabled: bool?
   openai_api_key: password?
   openai_model: str?

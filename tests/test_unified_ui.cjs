@@ -6,8 +6,8 @@ function element(id=''){
     append(x){this.children.push(x);},replaceChildren(x){this.children=x?[x]:[];}};
 }
 for(const id of ['diagnostics','ask-adr','diag-progress','adr-analysis-progress','diag-summary',
- 'adr-power-status','adr-power-events','adr-power-event-list','adr-answer','diag-targets','diag-observed','diag-discovery','adr-question','adr-analysis-consent','diag-csrf','diag-subnet'])elements.set(id,element(id));
-elements.get('adr-question').value='Check my office';elements.get('adr-analysis-consent').checked=true;
+ 'adr-power-status','adr-power-events','adr-power-event-list','adr-answer','diag-targets','diag-observed','diag-discovery','adr-question','diag-csrf','diag-subnet'])elements.set(id,element(id));
+elements.get('adr-question').value='Check my office';
 elements.get('diag-csrf').value='test-csrf';
 const buttons=['check','discover','ask'].map(action=>({...element(),dataset:{diagnostic:action}}));
 const state={progress:'Complete',answer:'<script>literal answer</script>',summary:'1 reply',enabled:true,cloud_enabled:true,
@@ -26,7 +26,6 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
 (async()=>{
  await flush();assert.equal(calls.length,1);assert.equal(calls[0].url,'diagnostic-state');
  assert.equal(elements.get('adr-question').value,'Check my office');
- assert.equal(elements.get('adr-analysis-consent').checked,true);
  assert.equal(elements.get('adr-answer').textContent,state.answer);
  assert.match(elements.get('adr-power-status').textContent,/UPS input power available/);
  for(const tick of intervals)tick();await flush();

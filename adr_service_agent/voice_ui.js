@@ -1,7 +1,7 @@
 (() => {
   const $=id=>document.getElementById(id),maxBytes=2*1024*1024;
   if(!$('adr-record'))return;
-  let state={},active=null,pending=null,draft='',lastAnswer='',utterance=null;
+  let state={},active=null,pending=null,draft='',lastAnswer='',utterance=null,expectedAnswer=null;
   const message=text=>{$('adr-voice-status').textContent=text;};
   const busy=()=>Boolean(active||pending);
   const supported=()=>window.isSecureContext&&navigator.mediaDevices?.getUserMedia&&typeof MediaRecorder!=='undefined';
@@ -37,7 +37,6 @@
     active=null;message(text);controls();
   }
   function consent(){
-    if(!$('adr-voice-consent').checked)throw new Error('Confirm sending your recording before using voice.');
     if(!voiceAllowed())throw new Error('Enable voice and cloud analysis in Configuration, or wait for the current check.');
   }
   function formatType(mime,name=''){
@@ -123,14 +122,16 @@
     }else if(pending&&Date.now()-pending.acceptedAt>65000){
       pending=null;message('Recording status changed. Type your question or try again.');
     }
-    if(state.answer!==lastAnswer){
-      const wasAnswer=lastAnswer;lastAnswer=state.answer||'';
-      if(lastAnswer&&$('adr-read-replies').checked&&!busy()&&!document.hidden)speak();
+    const answerKey=state.answer_id||state.answer||'';
+    if(answerKey!==lastAnswer){
+      const wasAnswer=lastAnswer;lastAnswer=answerKey;
+      if(expectedAnswer&&answerKey!==expectedAnswer.key&&state.answer&&!state.busy&&!busy()&&!document.hidden){expectedAnswer=null;speak();}
       else if(wasAnswer&&utterance)stopReading();
     }
+    if(expectedAnswer&&Date.now()-expectedAnswer.started>120000)expectedAnswer=null;
     controls();
   }
-  window.ADRVoice={busy,update};
+  window.ADRVoice={busy,update,expectAnswer:()=>{stopReading();expectedAnswer={key:state.answer_id||state.answer||'',started:Date.now()};}};
   $('adr-record').addEventListener('click',record);
   $('adr-record-cancel').addEventListener('click',()=>discard());
   $('adr-transcribe-file').addEventListener('click',async()=>{
@@ -145,7 +146,6 @@
   $('adr-use-transcript').addEventListener('click',()=>{if(draft)$('adr-question').value=draft;draft='';$('adr-transcript').textContent='';$('adr-use-transcript').hidden=true;message('Review your question, then tap Ask ADR.');});
   $('adr-read-answer').addEventListener('click',speak);
   $('adr-stop-reading').addEventListener('click',stopReading);
-  $('adr-voice-consent').addEventListener('change',()=>{if(!$('adr-voice-consent').checked&&active&&['recording','requesting'].includes(active.phase))discard('Recording canceled.');});
   function leave(){
     if(active&&['recording','requesting','stopping'].includes(active.phase))discard();
     if(active?.controller)active.controller.abort();stopReading();
