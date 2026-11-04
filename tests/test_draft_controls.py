@@ -29,6 +29,19 @@ class DraftControls(unittest.TestCase):
         self.pilot=Pilot(self.root,self.options,lambda *_:self.box)
         worker=patch('outlet_control.threading.Thread');self.worker=worker.start();self.addCleanup(worker.stop)
 
+    def test_outlet_status_is_separate_from_on_off_reset_controls(self):
+        self.verification_report()
+        output=page(self.pilot)
+        self.assertIn('outlet-status status-on',output)
+        self.assertIn('Reported outlet power: On',output)
+        self.assertIn('>On</button>',output);self.assertIn('>Off</button>',output);self.assertIn('>Reset</button>',output)
+        self.assertNotIn('>Restart</button>',output)
+        self.pilot.service_report['checks'][0]['snapshot']['power_action_pending_read']=True
+        output=page(self.pilot)
+        self.assertIn('outlet-status status-unknown',output)
+        self.assertIn('Reported outlet power: Awaiting read',output)
+        self.box.set_power.assert_not_called()
+
     def test_named_confirmation_single_command_and_replay_blocked(self):
         item=prepare(self.pilot,1,'OFF');self.box.set_power.assert_not_called()
         self.assertEqual(item['label'],'TV');self.assertFalse(self.pilot.config['allow_reboot'])

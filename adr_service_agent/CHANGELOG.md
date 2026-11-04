@@ -1,5 +1,10 @@
 ## 0.24.6
 
+- Replace outlet-state graphs with whole-WattBox voltage and amperage readings and history, using the documented read-only PowerStatus query.
+- Persist seven days of bounded metered history separately from old outlet observations; preserve missing readings as gaps and isolate history by configured WattBox identity.
+- Keep outlet inventory usable when metering is unsupported or fails, without estimating electrical values from outlet state.
+- Separate reported outlet state badges from neutral On / Off / Reset controls; pending verification shows Awaiting read.
+
 - Remove redundant History and Connections shortcut icons from the mobile header, leaving the ADR logo.
 - Keep the existing History and Connections sections and desktop navigation links.
 

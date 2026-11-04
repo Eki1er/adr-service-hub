@@ -118,6 +118,20 @@ class Wiring(unittest.TestCase):
         self.box=FakeBox(inventory());self.box.ups_status=Mock(return_value=sample())
         self.pilot=Pilot(self.root,self.root/'options.json',lambda *_:self.box)
 
+    def test_metering_success_and_failure_preserve_outlets_and_history_gaps(self):
+        self.box.power_status=Mock(return_value={'current_a':1.25,'power_w':140.0,'voltage_v':119.5,'safe_voltage':True})
+        snapshot=self.pilot.service_jobs()[0][2]()
+        self.assertEqual(snapshot['electrical']['voltage_v'],119.5)
+        self.assertEqual(snapshot['electrical_history']['series'][1]['points'][-1]['value'],1.25)
+        self.assertNotIn('power_history',snapshot)
+        self.box.power_status.side_effect=ProtocolError('private device response')
+        snapshot=self.pilot.service_jobs()[0][2]()
+        self.assertEqual(len(snapshot['outlets']),18)
+        self.assertNotIn('electrical',snapshot)
+        self.assertIsNone(snapshot['electrical_history']['series'][0]['points'][-1]['value'])
+        self.assertNotIn('private device response',json.dumps(snapshot))
+        self.assertEqual(self.box.resets,[])
+
     def test_existing_inventory_is_kept_even_if_ups_read_fails(self):
         self.box.ups_status.side_effect=ProtocolError('raw private response')
         snapshot=self.pilot.service_jobs()[0][2]()

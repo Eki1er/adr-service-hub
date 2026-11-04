@@ -1,3 +1,27 @@
+## WattBox electrical history and controls (0.24.6)
+
+The WattBox tile shows total measured voltage (V) and current (A), with separate
+history graphs. System checks read `?PowerStatus` over the existing approved SSH
+connection. ASCII protocol v2.4 returns amps, watts, volts, and a safe-voltage flag;
+readings are parsed in those units without scaling or estimating from outlet count.
+This release uses whole-unit metering, not per-outlet metering or energy in kWh.
+
+Metered history starts on collection, is retained for seven days with at most 512
+samples, and is isolated by configured WattBox identity. Existing outlet-state
+history is preserved on disk but is no longer collected or displayed. Unsupported
+metering (including WB-150/250), rejected queries, and failed reads show unavailable
+values and create explicit graph gaps. A failed meter read does not discard valid
+outlet inventory. No electrical data has been verified on the live pilot yet.
+
+Each outlet has a separate text and color status badge: On, Off, Unknown, or Awaiting
+read. On / Off / Reset buttons use neutral styling rather than indicating state.
+Existing permission settings, named confirmations, single-outlet commands and
+post-action verification still apply. The redundant mobile header shortcuts are
+removed; History and Connections remain in their existing sections.
+
+Protocol reference:
+https://www.snapav.com/wcsstore/ExtendedSitesCatalogAssetStore/attachments/documents/PowerManagement/ProtocolsAndDrivers/SnapAV_Wattbox_API_V2.4.pdf
+
 ## History chart display (0.24.5)
 
 Network history uses paired download/upload lines and a shared legend and grid.

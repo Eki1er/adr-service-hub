@@ -65,18 +65,19 @@ def visuals(name, snapshot, lines):
                 if maximum and consumed is not None and 0 <= consumed <= maximum:
                     output += '<div class="budget"><span>PoE budget · ' + f'{consumed:g} / {maximum:g} W' + '</span><meter min="0" max="' + str(maximum) + '" value="' + str(consumed) + '" aria-label="PoE power consumed">' + str(consumed) + ' W</meter></div>'
     if name == 'WattBox':
-        output += '<div class="outlet-strip" aria-label="Reported outlet power">'
-        for outlet in snapshot.get('outlets', [])[:32]:
-            state = 'on' if outlet.get('on') is True else 'off' if outlet.get('on') is False else 'unknown'
-            output += '<span class="outlet-' + state + '" title="' + esc(str(outlet.get('label', 'Outlet')) + ': ' + state) + '">' + esc(outlet.get('number', '·')) + '</span>'
-        output += '</div><small>Reported outlet power only</small>'
-        history=snapshot.get('power_history',{})
-        output += '<div class="power-history"><h4>WattBox power history</h4>'
-        if not history.get('series'):
-            output += '<p class="empty-state">Outlet history starts with the next successful system check.</p>'
-        for series in history.get('series',[])[:5]:output += history_chart(dict(series, points_only=False, observation_ticks=True))
-        if history.get('error'):output += '<p class="measurement-warning">'+esc(history['error'])+'</p>'
-        output += '<small>'+esc(history.get('note','Sampled outlet states, not watts or proof of equipment operation.'))+'</small></div>'
+        metering=snapshot.get('electrical') or {}
+        output += '<div class="wattbox-metering"><h4>Voltage and amperage</h4><div class="internet-metrics">'
+        for key,label,unit in (('voltage_v','Voltage','V'),('current_a','Current','A')):
+            value=number(metering.get(key))
+            output+='<div><span>'+label+'</span><strong>'+(f'{value:g} '+unit if value is not None else 'Unavailable')+'</strong></div>'
+        output+='</div><p class="report-caption">Total for this WattBox · latest system check</p>'
+        if snapshot.get('electrical_error'):output+='<p class="measurement-warning">'+esc(snapshot['electrical_error'])+'</p>'
+        history=snapshot.get('electrical_history',{})
+        for series in history.get('series',[])[:2]:
+            output+=trend_chart([series],series.get('name','WattBox')+' history',series.get('unit',''))
+        if not history.get('series'):output+='<p class="empty-state">Voltage and amperage history starts with the next successful metered reading.</p>'
+        if history.get('error'):output+='<p class="measurement-warning">'+esc(history['error'])+'</p>'
+        output+='<small>'+esc(history.get('note','Whole-WattBox readings; unavailable measurements remain gaps.'))+'</small></div>'
     if name == 'UniFi' and snapshot.get('gateway_speedtest'):
         output += network_panels({'UniFi':{'snapshot':snapshot}},include_access_points=False)
     if name == 'Sense':

@@ -1,4 +1,4 @@
-"""Bounded outlet observations; no inferred watts, outages or device operation."""
+"""Bounded WattBox history; electrical measurements are separate from outlet states."""
 import json
 import math
 import time
@@ -50,3 +50,41 @@ class OutletHistory:
                 'unit':'Outlet power','state_labels':{'0':'Off','1':'On'},'points_only':True,
                 'points':[{'time':r['time'],'value':int(r['outlets'][key]) if key in r['outlets'] else None} for r in self.data['samples']]})
         return {'series':series,'error':self.error,'note':'Sampled outlet power states, not watts or proof of equipment operation. Monitoring gaps and short changes can be missed.'}
+
+
+class ElectricalHistory:
+    """Persist actual system voltage/current; missing samples remain explicit gaps."""
+    def __init__(self,path,clock=time.time):
+        self.path=Path(path);self.clock=clock;self.error=''
+        self.data={'target':'','samples':[]}
+        try:
+            if self.path.exists():
+                if self.path.stat().st_size>1048576:raise ValueError()
+                data=json.loads(self.path.read_text())
+                if not isinstance(data,dict) or set(data)!={'target','samples'} or not isinstance(data['target'],str) or not isinstance(data['samples'],list) or len(data['samples'])>512:raise ValueError()
+                for row in data['samples']:
+                    if not isinstance(row,dict) or set(row)!={'time','epoch','voltage_v','current_a'}:raise ValueError()
+                    if type(row['epoch']) not in (int,float) or not math.isfinite(row['epoch']):raise ValueError()
+                    if row['time']!=datetime.fromtimestamp(row['epoch'],timezone.utc).isoformat():raise ValueError()
+                    for key,limit in (('voltage_v',600),('current_a',1000)):
+                        value=row[key]
+                        if value is not None and (type(value) not in (int,float) or not math.isfinite(value) or not 0<=value<=limit):raise ValueError()
+                self.data=data
+        except (OSError,ValueError,TypeError,KeyError,OverflowError):
+            self.error='Saved electrical history could not be read. Existing storage was preserved.'
+
+    def observe(self,target,measurement):
+        if self.error:return {'series':[],'error':self.error}
+        now=self.clock()
+        if target!=self.data['target']:self.data={'target':target,'samples':[]}
+        row={'time':datetime.fromtimestamp(now,timezone.utc).isoformat(),'epoch':now}
+        for key,limit in (('voltage_v',600),('current_a',1000)):
+            value=(measurement or {}).get(key)
+            row[key]=value if type(value) in (int,float) and math.isfinite(value) and 0<=value<=limit else None
+        self.data['samples']=[r for r in self.data['samples'] if 0<=now-r['epoch']<=7*86400][-511:]+[row]
+        try:save(self.path,self.data)
+        except OSError:self.error='Electrical history could not be saved.'
+        return {'series':[{'name':label,'unit':unit,'max_gap_seconds':3600,
+            'points':[{'time':r['time'],'value':r[key]} for r in self.data['samples']]}
+            for key,label,unit in (('voltage_v','WattBox voltage','V'),('current_a','WattBox current','A'))],
+            'error':self.error,'note':'Whole-WattBox measurements. History starts when readings are collected; unavailable readings remain gaps.'}

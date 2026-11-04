@@ -68,6 +68,19 @@ def parse_inventory(model, firmware, count, labels, states):
     ]}
 
 
+def parse_power_status(response):
+    """ASCII v2.4 system totals: amps, watts, volts, safe-voltage flag."""
+    fields=response.split(',') if isinstance(response,str) else []
+    if len(fields)!=4 or fields[3] not in ('0','1'):
+        raise ProtocolError('Invalid WattBox power measurement response.')
+    try:
+        amps,watts,volts=map(float,fields[:3])
+        if not all(math.isfinite(v) for v in (amps,watts,volts)) or not (0<=amps<=1000 and 0<=watts<=1000000 and 0<=volts<=600):raise ValueError()
+    except (ValueError,TypeError):
+        raise ProtocolError('Invalid WattBox power measurement response.') from None
+    return {'current_a':amps,'power_w':watts,'voltage_v':volts,'safe_voltage':fields[3]=='1'}
+
+
 def parse_ups(connected,status=None):
     if connected not in ('0','1'):raise ProtocolError('Invalid UPS connection response.')
     if connected=='0':return {'connected':False}
@@ -131,7 +144,7 @@ class WattBox:
         return line.decode("ascii", errors="replace").strip()
 
     def query(self, name):
-        if name not in ("Model", "Firmware", "OutletCount", "OutletName", "OutletStatus", "UPSConnection", "UPSStatus"):
+        if name not in ("Model", "Firmware", "OutletCount", "OutletName", "OutletStatus", "UPSConnection", "UPSStatus", "PowerStatus"):
             raise ValueError("Unsupported query")
         self.channel.sendall(f"?{name}\n".encode("ascii"))
         deadline = time.monotonic() + 8
@@ -148,6 +161,9 @@ class WattBox:
     def inventory(self):
         return parse_inventory(*(self.query(n) for n in
             ("Model", "Firmware", "OutletCount", "OutletName", "OutletStatus")))
+
+    def power_status(self):
+        return parse_power_status(self.query('PowerStatus'))
 
     def ups_status(self):
         # Never query UPSStatus on a unit that does not report a connected UPS.

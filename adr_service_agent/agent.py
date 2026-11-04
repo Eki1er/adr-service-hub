@@ -7,6 +7,7 @@ import os
 import secrets
 import signal
 import threading
+from paramiko import SSHException
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,7 +20,7 @@ from network_diagnostics import DiagnosticError
 from native_events import NativeEvents, MAX_IMPORT
 from usb_ups import USBUPS
 from power_events import PowerJournal, identity as power_identity
-from power_history import OutletHistory
+from power_history import ElectricalHistory
 from monitoring import MonitoringSchedule
 from presentation import present_html
 from ui_icons import icon
@@ -245,7 +246,7 @@ class Pilot:
         self.ups_interval=interval if type(interval) is int and 5<=interval<=300 else 15
         self.ups_running=False;self.ups_next_due=time.time()+60
         self.power_journal=PowerJournal(self.data/'power_events.json',self.ups_interval)
-        self.outlet_history=OutletHistory(self.data/'outlet_history.json')
+        self.electrical_history=ElectricalHistory(self.data/'electrical_history.json')
         self.native_events=NativeEvents(self.data/'native_events.json',self.araknis_options)
         self.usb_ups=USBUPS(self.data/'usb_ups_events.json',self.araknis_options)
         self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
@@ -435,7 +436,16 @@ class Pilot:
                 if self.wattbox_ups_monitoring_enabled():
                     try:inventory['power_monitor']=self.read_ups(box)
                     except ProtocolError:inventory['power_monitor']=self.power_status()
-                inventory['power_history']=self.outlet_history.observe(self.power_target(),inventory)
+                # Optional read-only metering must not discard a valid outlet inventory.
+                try:
+                    if str(inventory.get('model','')).upper().startswith(('WB-150','WB-250')):
+                        raise ProtocolError('Metering unsupported on this model.')
+                    metering=box.power_status()
+                    if not isinstance(metering,dict):raise ProtocolError('Invalid metering response.')
+                    inventory['electrical']=metering
+                except (ProtocolError,OSError,SSHException,AttributeError):
+                    inventory['electrical_error']='Voltage and amperage readings are unavailable from this WattBox.'
+                inventory['electrical_history']=self.electrical_history.observe(self.power_target(),inventory.get('electrical'))
                 return inventory
 
         def target_id(prefix, keyfile):
@@ -1169,8 +1179,10 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         outlet_markup += '<p class="measurement-warning">' + ('Checking outlet power…' if pilot.active else 'Outlet power remains unverified. Run All Checks.') + '</p>'
     for outlet in wb_snapshot.get('outlets', []):
         if type(outlet.get('number')) is not int or not 1<=outlet['number']<=18: continue
-        outlet_markup += '<div class="outlet-row"><div><strong>' + str(outlet['number']) + ' · ' + esc(outlet.get('label','Outlet')) + '</strong><small>' + ('Awaiting read' if wb_snapshot.get('power_action_pending_read') else 'On' if outlet.get('on') is True else 'Off' if outlet.get('on') is False else 'Unknown') + '</small></div><div class="outlet-actions">'
-        for action, label in (('ON','On'),('OFF','Off'),('RESET','Restart')):
+        state='unknown' if wb_snapshot.get('power_action_pending_read') else 'on' if outlet.get('on') is True else 'off' if outlet.get('on') is False else 'unknown'
+        state_label='Awaiting read' if wb_snapshot.get('power_action_pending_read') else {'on':'On','off':'Off','unknown':'Unknown'}[state]
+        outlet_markup += '<div class="outlet-row"><div class="outlet-identity"><strong>' + str(outlet['number']) + ' · ' + esc(outlet.get('label','Outlet')) + '</strong><span class="outlet-status status-'+state+'" aria-label="Reported outlet power: '+state_label+'">'+state_label+'</span></div><div class="outlet-actions" aria-label="Outlet '+str(outlet['number'])+' controls">'
+        for action, label in (('ON','On'),('OFF','Off'),('RESET','Reset')):
             outlet_markup += form('outlet-prepare', label, '<input type="hidden" name="outlet" value="' + str(outlet['number']) + '"><input type="hidden" name="operation" value="' + action + '">', danger=action!='ON', disabled=pilot.active or pilot.araknis_options.get('allow_outlet_control') is not True)
         outlet_markup += '</div></div>'
     if pilot.araknis_options.get('allow_outlet_control') is not True:

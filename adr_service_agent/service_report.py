@@ -97,6 +97,9 @@ def assess(name, snapshot):
     if name == 'WattBox':
         usable = isinstance(snapshot.get('outlets'), list)
         notes.append('Outlet inventory received. Power state does not verify connected equipment operation.')
+        electrical=snapshot.get('electrical')
+        if electrical:
+            notes.append('WattBox total voltage '+str(electrical['voltage_v'])+' V; current '+str(electrical['current_a'])+' A; power '+str(electrical['power_w'])+' W.')
         power=snapshot.get('power_monitor')
         if power and power.get('enabled'):
             current=power.get('current')
