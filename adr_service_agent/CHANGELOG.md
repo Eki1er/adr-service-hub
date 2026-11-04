@@ -1,3 +1,11 @@
+## 0.24.5
+
+- Replace separate network dot plots with larger paired download/upload line charts, shared axes, colored legends and gridlines inspired by the supplied OvrC references.
+- Add local chart controls for individual readings and 24-hour, week or all-recorded periods; retain selection during dashboard refresh without running tests or contacting devices.
+- Connect daily scheduled speed-test observations while preserving explicit unknown readings and gaps longer than 36 hours; never extend results to the current time.
+- Group latency series on a shared chart, retain Green/UniFi source separation and use client-site local dates in labels and sample details.
+- Replace UPS and WattBox history dots with observation bars on dashed unobserved-time rails; never infer uninterrupted utility power or exact outage durations between reports.
+
 ## 0.24.4
 
 - Feature an expanded Internet tile at the top of Network with Green speed/latency results and source-labeled history graphs; keep UniFi gateway results separate.

@@ -1,0 +1,15 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const handlers={};let calls=0;
+const document={forms:[],hidden:false,querySelector:()=>null,querySelectorAll:()=>[],getElementById:()=>null,addEventListener:(name,fn)=>(handlers[name]??=[]).push(fn)};
+const window={};window.parent=window;
+vm.runInNewContext(fs.readFileSync('adr_service_agent/dashboard_live.js','utf8'),{document,window,location:{pathname:'/test'},sessionStorage:{getItem:()=>null},addEventListener(){},matchMedia:()=>({matches:false}),setTimeout(){},setInterval(){},Intl,Date,fetch(){calls++;}});
+const ranges=['week','day','all'].map(value=>({dataset:{trendWindow:value},hidden:false}));
+const items=['0','1'].map(value=>({dataset:{trendItem:value},style:{}}));
+const range={value:'day'},series={value:'1'};
+const card={querySelector:s=>s==='[data-trend-range]'?range:series,querySelectorAll:s=>s==='[data-trend-window]'?ranges:items};
+const input={dataset:{trendRange:''},matches:s=>s==='[data-trend-range], [data-trend-series]',closest:()=>card};
+for(const fn of handlers.change)fn({target:input});
+assert.deepEqual(ranges.map(r=>r.hidden),[true,false,true]);assert.equal(items[0].style.display,'none');assert.equal(items[1].style.display,'');
+range.value='week';series.value='all';for(const fn of handlers.change)fn({target:input});
+assert.equal(ranges[0].hidden,false);assert.equal(items.every(i=>!i.hidden),true);assert.equal(calls,0);
+console.log('History controls passed: local period and series filters, no tests or device actions.');

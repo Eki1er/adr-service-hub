@@ -1,0 +1,45 @@
+import sys
+import unittest
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'adr_service_agent'))
+from dashboard import configure_site_timezone, ups_panel
+from dashboard_visuals import trend_chart, network_history_charts
+
+class TrendChartTests(unittest.TestCase):
+    def setUp(self):configure_site_timezone({'site_timezone':'America/New_York'})
+    def series(self, name, values):
+        base=datetime(2026,11,1,12,tzinfo=timezone.utc)
+        return {'name':name,'unit':'Mbit/s','max_gap_seconds':43200,
+                'points':[{'time':(base+timedelta(hours=h)).isoformat(),'value':v} for h,v in values]}
+    def test_daily_download_upload_share_axes_and_connect_despite_old_gap_setting(self):
+        output=network_history_charts([
+            self.series('UniFi speed test Download',[(0,900),(24.1,780),(48.2,938)]),
+            self.series('UniFi speed test Upload',[(0,820),(24.1,850),(48.2,830)])], 'UniFi')
+        self.assertEqual(output.count('data-trend-card'),1)
+        self.assertEqual(output.count('class="trend-line"'),4) # week and all, both series
+        self.assertIn('trend-color-1',output)
+        self.assertIn('Download</span>',output);self.assertIn('Upload</span>',output)
+        self.assertIn('chart-grid',output);self.assertIn('data-trend-range',output)
+        self.assertIn('EST',output);self.assertNotIn('UTC',output)
+    def test_missing_daily_runs_and_unknown_values_break_trends(self):
+        output=trend_chart([self.series('Download',[(0,900),(24,800),(48,None),(72,850),(96,870),(168,910)])], 'History','Mbit/s')
+        week=output.split('data-trend-window="day"')[0]
+        self.assertEqual(week.count('class="trend-line"'),2)
+        self.assertIn('long gaps and unavailable readings',output)
+        self.assertNotIn('nan',output)
+    def test_sources_are_named_and_untrusted_labels_are_escaped(self):
+        output=trend_chart([self.series('<script>x</script>',[(0,781)])], 'Green Ookla <history>','Mbit/s')
+        self.assertNotIn('<script>',output);self.assertIn('&lt;history&gt;',output)
+        self.assertIn('781 Mbit/s',output)
+    def test_ups_uses_observation_bars_without_joining_unknown_intervals(self):
+        events=[{'received_at':'2026-11-04T03:00:00+00:00','state':'line_power','kind':'baseline'},
+                {'received_at':'2026-11-04T04:00:00+00:00','state':'unverified','kind':'monitoring_gap'},
+                {'received_at':'2026-11-04T05:00:00+00:00','state':'on_battery','kind':'on_battery'}]
+        output=ups_panel({'enabled':True,'status':'reported','current':'on_battery','events':events})
+        self.assertEqual(output.count('class="state-observation"'),2)
+        self.assertIn('state-unknown-rail',output)
+        self.assertNotIn('class="chart-point"',output);self.assertNotIn('class="chart-line"',output)
+        self.assertIn('unobserved time',output)
+
+if __name__=='__main__':unittest.main()

@@ -74,7 +74,7 @@ def visuals(name, snapshot, lines):
         output += '<div class="power-history"><h4>WattBox power history</h4>'
         if not history.get('series'):
             output += '<p class="empty-state">Outlet history starts with the next successful system check.</p>'
-        for series in history.get('series',[])[:5]:output += history_chart(series)
+        for series in history.get('series',[])[:5]:output += history_chart(dict(series, points_only=False, observation_ticks=True))
         if history.get('error'):output += '<p class="measurement-warning">'+esc(history['error'])+'</p>'
         output += '<small>'+esc(history.get('note','Sampled outlet states, not watts or proof of equipment operation.'))+'</small></div>'
     if name == 'UniFi' and snapshot.get('gateway_speedtest'):
@@ -130,8 +130,12 @@ def history_chart(series):
     if active: segments.append(active)
     output += '<svg class="history-chart" viewBox="0 0 308 136" role="img" aria-label="' + title + ' history, ' + f'{low:g} to {high:g} ' + unit + '"><title>' + title + ' history</title>'
     output += '<path d="M38 18V102H290" class="chart-axis"/>'
+    if series.get('observation_ticks'):
+        output += '<path d="M38 23H288M38 95H288" class="state-unknown-rail"/>'
     for segment in segments:
-        if series.get('points_only'):
+        if series.get('observation_ticks'):
+            for x,y in segment:output += f'<path d="M{x:.2f} {y-7:.2f}v14" class="state-observation"/>'
+        elif series.get('points_only'):
             for x,y in segment:output += f'<circle cx="{x:.2f}" cy="{y:.2f}" r="3" class="chart-point"/>'
         elif len(segment) == 1:
             x, y = segment[0]
@@ -151,7 +155,84 @@ def history_chart(series):
     format_time = '%m/%d %H:%M' if first.date() != last.date() else '%H:%M'
     start, end = first.strftime(format_time), last.strftime(format_time)
     output += '<text x="38" y="122">' + start + '</text><text x="288" y="122" text-anchor="end">' + end + '</text></svg>'
-    output += '<small>Range ' + f'{low:g}–{high:g} ' + unit + ' · ' + str(len(valid)) + ' samples · ' + last.strftime('%Z') + (' · partial history' if series.get('truncated') else '') + '</small></div>'
+    summary = (str(len(valid)) + ' reported observations') if series.get('observation_ticks') else ('Range ' + f'{low:g}–{high:g} ' + unit + ' · ' + str(len(valid)) + ' samples')
+    output += '<small>' + summary + ' · ' + last.strftime('%Z') + (' · partial history' if series.get('truncated') else '') + '</small></div>'
+    return output
+
+
+def trend_chart(series_list, title, unit):
+    """Shared axes for scheduled tests; line joins indicate trends between tests."""
+    from dashboard import site_timezone_name
+    try: zone = ZoneInfo(site_timezone_name())
+    except (ZoneInfoNotFoundError, ValueError):
+        return '<p>Configure the client site timezone to display history dates.</p>'
+    rows=[]
+    for series in series_list:
+        points=[]
+        for item in series.get('points', [])[:2000]:
+            try:
+                stamp=datetime.fromisoformat(str(item.get('time','')).replace('Z','+00:00'))
+                if stamp.tzinfo is not None: points.append((stamp.timestamp(),number(item.get('value'))))
+            except (ValueError,TypeError): pass
+        points.sort()
+        label=str(series.get('name','Reading'))
+        for prefix in ('Green Ookla speed test ', 'Green speed test ', 'UniFi speed test '):
+            if label.startswith(prefix): label=label[len(prefix):]
+        rows.append((label,points))
+    valid=[(t,v) for _,points in rows for t,v in points if v is not None]
+    output='<section class="trend-card" data-trend-card="'+esc(title)+'"><header><h4>'+esc(title)+'</h4><div class="trend-controls"><label>Show <select data-trend-series><option value="all">All readings</option>'
+    for i,(label,_) in enumerate(rows):output+='<option value="'+str(i)+'">'+esc(label)+'</option>'
+    output+='</select></label><label>Period <select data-trend-range><option value="week">Week</option><option value="day">24 hours</option><option value="all">All recorded</option></select></label></div></header>'
+    if not valid:return output+'<p class="empty-state">Awaiting recorded '+esc(title.lower())+' results.</p></section>'
+    last=max(t for t,_ in valid);first=min(t for t,_ in valid)
+    for key,seconds in (('week',7*86400),('day',86400),('all',max(last-first,1))):
+        start=max(first,last-seconds); selected=[(t,v) for t,v in valid if start<=t<=last]
+        maximum=max([v for _,v in selected]+[1]); ceiling=math.ceil(maximum/5)*5 if maximum<=20 else math.ceil(maximum/100)*100
+        def x(t):return 64+(t-start)/max(last-start,1)*512
+        def y(v):return 200-v/ceiling*160
+        output+='<div data-trend-window="'+key+'"'+(' hidden' if key!='week' else '')+'><div class="trend-legend">'
+        for i,(label,_) in enumerate(rows):output+='<span data-trend-item="'+str(i)+'" class="trend-color-'+str(i%4)+'"><i></i>'+esc(label)+'</span>'
+        output+='</div><svg class="trend-chart" viewBox="0 0 600 250" role="img" aria-label="'+esc(title)+'"><title>'+esc(title)+'</title>'
+        for i in range(6):
+            yy=40+i*32;value=ceiling*(5-i)/5
+            output+=f'<path d="M64 {yy}H576" class="chart-grid"/><text x="55" y="{yy+4}" text-anchor="end">{value:g}</text>'
+        for i in range(4):
+            t=start+(last-start)*i/3;xx=x(t);local=datetime.fromtimestamp(t,zone)
+            output+=f'<path d="M{xx:.2f} 40V200" class="chart-grid"/><text x="{xx:.2f}" y="223" text-anchor="'+('start' if i==0 else 'end' if i==3 else 'middle')+'">'+local.strftime('%b %d' if last-start>86400 else '%H:%M')+'</text>'
+        for i,(label,points) in enumerate(rows):
+            # Throughput is discrete: connect daily tests, but break missed daily runs.
+            # Latency uses a shorter bound and explicit unknowns always break a path.
+            speed=unit=='Mbit/s' or label.lower()=='ping';gap=36*3600 if speed else 3600
+            segments=[];active=[];previous=None
+            for t,v in points:
+                if t<start or t>last:continue
+                if v is None or (previous is not None and t-previous>gap):
+                    if active:segments.append(active)
+                    active=[]
+                if v is not None:active.append((t,v))
+                previous=t
+            if active:segments.append(active)
+            output+='<g data-trend-item="'+str(i)+'" class="trend-color-'+str(i%4)+'">'
+            for segment in segments:
+                if len(segment)>1:
+                    path=' '.join(('M' if j==0 else 'L')+f'{x(t):.2f},{y(v):.2f}' for j,(t,v) in enumerate(segment))
+                    output+='<path d="'+path+'" class="trend-line"/>'
+                for t,v in segment:
+                    caption=label+': '+f'{v:g} '+unit+' · '+datetime.fromtimestamp(t,zone).strftime('%b %d, %I:%M %p %Z')
+                    output+=f'<circle cx="{x(t):.2f}" cy="{y(v):.2f}" r="3" class="trend-sample"><title>'+esc(caption)+'</title></circle>'
+            output+='</g>'
+        output+='</svg><small>'+esc(unit)+' · '+str(len(selected))+' recorded readings · '+esc(datetime.fromtimestamp(last,zone).strftime('%Z'))+'</small></div>'
+    output+='<p class="report-caption">Periods end at the latest recorded reading: '+esc(datetime.fromtimestamp(last,zone).strftime('%b %d · %I:%M %p %Z'))+'. Lines show trends between tests; long gaps and unavailable readings remain breaks.</p></section>'
+    return output
+
+
+def network_history_charts(history, source):
+    speed=[s for s in history if s.get('unit') in ('Mbps','Mbit/s') and any(w in str(s.get('name','')).lower() for w in ('download','upload'))][:2]
+    latency=[s for s in history if s.get('unit')=='ms' and any(w in str(s.get('name','')).lower() for w in ('latency','ping'))][:4]
+    used={id(s) for s in speed+latency}
+    output=trend_chart(speed,source+' Internet test history','Mbit/s')
+    if latency:output+=trend_chart(latency,source+' latency history','ms')
+    for series in [s for s in history if id(s) not in used][:4]:output+=history_chart(series)
     return output
 
 
@@ -222,8 +303,7 @@ def network_panels(checks, include_internet=True, include_access_points=True):
     for name in (source+' speed test Download', source+' speed test Upload'):
         if not any(series.get('name')==name for series in history):
             history.insert(0, {'name':name,'unit':'Mbit/s','points':[],'status':'Awaiting '+source+' results'})
-    for series in history[:8]:
-        output += history_chart(series)
+    output += network_history_charts(history[:8], source)
     output += '</div></section>'
     if not include_access_points:return output+'</div>'
     if not include_internet:output='<div class="network-panels">'

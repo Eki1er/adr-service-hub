@@ -1,3 +1,23 @@
+## History chart display (0.24.5)
+
+Network history uses paired download/upload lines and a shared legend and grid.
+Use Show to display all readings or one series, and Period for 24 hours, a week,
+or all retained observations. Periods end at the latest recorded reading, not at
+an assumed current result. Controls only change the displayed chart; they do not
+run checks. Selections persist during automatic dashboard refresh.
+
+Lines connect recorded tests to make trends readable. Daily throughput and speed-test
+ping observations can connect across up to 36 hours; longer gaps and explicitly
+unavailable readings break the line. Connectivity latency uses a one-hour gap limit.
+Hover a sample for its value and site-local measurement time. Green and UniFi
+remain separate measurement sources; collection, test scheduling and retention
+are unchanged.
+
+UPS and WattBox history uses vertical observation bars instead of dots. Dashed
+rails show unobserved time, not continuous confirmed power. UPS events retain
+receipt-time chart positions and separate device-reported times in the event list.
+This display does not invent outage durations or recover unrecorded history.
+
 ## UPS results and Ask ADR navigation (0.24.4)
 
 Network opens with an expanded Internet tile showing Green download/upload,

@@ -1,4 +1,20 @@
 (() => {
+  const historySelections=new Map();
+  function applyHistorySelection(card,range,series){
+    card.querySelector('[data-trend-range]').value=range;
+    card.querySelector('[data-trend-series]').value=series;
+    card.querySelectorAll('[data-trend-window]').forEach(panel=>{panel.hidden=panel.dataset.trendWindow!==range;});
+    card.querySelectorAll('[data-trend-item]').forEach(item=>{item.hidden=series!=='all'&&item.dataset.trendItem!==series;item.style.display=item.hidden?'none':'';});
+  }
+  document.addEventListener('change', event => {
+    const input=event.target;
+    if(!input.dataset || !input.matches('[data-trend-range], [data-trend-series]'))return;
+    const card=input.closest('[data-trend-card]');if(!card)return;
+    const range=card.querySelector('[data-trend-range]').value;
+    const series=card.querySelector('[data-trend-series]').value;
+    historySelections.set(card.dataset?.trendCard,{range,series});
+    applyHistorySelection(card,range,series);
+  });
   const storageKey = 'adr-view:' + location.pathname;
   const main = document.querySelector('main');
   const views = ['all', 'power', 'network', 'av'];
@@ -147,6 +163,10 @@
       const x = scrollX, y = scrollY;
       applying = true;
       patch(main, incoming);
+      main.querySelectorAll('[data-trend-card]').forEach(card=>{
+        const choice=historySelections.get(card.dataset.trendCard);
+        if(choice)applyHistorySelection(card,choice.range,choice.series);
+      });
       applySummaryFilter();
       if (!document.querySelector('main + .group-tabs') && doc.querySelector('main + .group-tabs')) {
         main.after(doc.querySelector('main + .group-tabs').cloneNode(true));

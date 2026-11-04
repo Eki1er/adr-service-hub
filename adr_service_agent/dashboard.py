@@ -236,9 +236,9 @@ def ups_panel(status):
     output += '<details class="ups-events"><summary>Recorded UPS events</summary>'
     events = status.get('events', [])[-12:]
     points=[{'time':item.get('received_at'),'value':{'line_power':1,'on_battery':0}.get(item.get('state'))} for item in status.get('events',[])]
-    chart=history_chart({'name':'UPS power history','unit':'Power source','state_labels':{'0':'Battery','1':'Utility'},'points_only':True,'points':points,'status':'No recorded UPS state history yet.'})
+    chart=history_chart({'name':'UPS power history','unit':'Power source','state_labels':{'0':'Battery','1':'Utility'},'observation_ticks':True,'points':points,'status':'No recorded UPS state history yet.'})
     # Event markers describe observations only; no continuous healthy interval is inferred.
-    output=output.replace('<details class="ups-events">',chart+'<p class="report-caption">Chart markers use receipt times. Device-reported times are listed below; gaps are not filled.</p><details class="ups-events">')
+    output=output.replace('<details class="ups-events">',chart+'<p class="report-caption">Vertical bars mark reported states at receipt time. Dashed rails are unobserved time, not confirmed utility or battery operation. Device-reported times are listed below.</p><details class="ups-events">')
     if not events:
         output += '<p>No UPS events recorded yet.</p>'
     for item in reversed(events):
