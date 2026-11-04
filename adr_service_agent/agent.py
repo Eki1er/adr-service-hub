@@ -1091,9 +1091,9 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     if report:
         counts = report['counts']
         text += '<div class="summary-strip" aria-label="Report summary">'
-        for count, label, style in [(counts['verified'], 'Verified reads', 'good'), (counts['review'], 'To review', 'attention'), (counts['unverified'], 'Unverified', '')]:
-            text += '<div class="summary-tile ' + style + '"><span class="summary-number">' + esc(count) + '</span><span class="summary-label">' + label + '</span></div>'
-        text += '</div><p class="report-caption">Completed ' + esc(display_time(report.get('completed_at'))) + '</p>'
+        for status, count, label, style in [('verified', counts['verified'], 'Verified reads', 'good'), ('review', counts['review'], 'To review', 'attention'), ('unverified', counts['unverified'], 'Unverified', '')]:
+            text += '<button type="button" class="summary-tile ' + style + '" data-summary-filter="' + status + '" aria-pressed="false" aria-controls="systems"><span class="summary-number">' + esc(count) + '</span><span class="summary-label">' + label + '</span></button>'
+        text += '</div><p id="summary-filter-status" role="status" hidden></p><button type="button" id="summary-filter-clear" hidden>Show all systems</button><p class="report-caption">Completed ' + esc(display_time(report.get('completed_at'))) + '</p>'
     if pilot.service_running or pilot.service_error:
         text += progress_markup
     elif progress_markup:

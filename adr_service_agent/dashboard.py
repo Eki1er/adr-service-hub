@@ -163,7 +163,8 @@ def cards(report, names=SYSTEMS, outlet_controls=""):
         headline = tile_value(name, snapshot, lines) if check else 'Not checked yet'
         stamp = display_time(check.get('post_action_verified_at') or check.get('completed_at')) if check else ''
         short_stamp = stamp.split('·')[-1].strip()
-        output += '<article class="system-card ' + style + (' sense-card' if name == 'Sense' else '') + '"><details class="system-tile"><summary class="tile-summary" aria-label="' + esc(name + ' readings: ' + short_label) + '">'
+        status = check.get('status', 'unverified') if check else 'pending'
+        output += '<article id="system-' + esc(name.lower()) + '" data-check-status="' + esc(status) + '" class="system-card ' + style + (' sense-card' if name == 'Sense' else '') + '"><details class="system-tile"><summary class="tile-summary" aria-label="' + esc(name + ' readings: ' + short_label) + '">'
         output += '<div class="tile-icon-row"><span class="system-icon">' + icon(SYSTEM_ICONS[name]) + '</span><span class="status-dot" aria-hidden="true"></span></div><h3>' + esc(name) + '</h3><span class="badge" aria-label="' + esc(label) + '">' + short_label + '</span>'
         output += '<p class="tile-value">' + esc(headline) + '</p><span class="tile-footer"><span title="' + esc(stamp) + '">' + esc(short_stamp) + '</span>' + icon('chevron') + '</span></summary><div class="tile-body">'
         if check is None:
@@ -216,7 +217,17 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup=""):
     output += '</nav>'
     for key, title, names in GROUPS:
         output += '<div class="system-group group-' + key + '"><div class="section-label"><h2>' + title + '</h2></div>'
-        if key == 'network': output += network_panels(checks) + diagnostics_markup
+        if key == 'network':
+            output += network_panels(checks)
+            diagnostic_check=checks.get('Network diagnostics')
+            if diagnostic_check:
+                status=html.escape(str(diagnostic_check.get('status','unverified')),quote=True)
+                notes=diagnostic_check.get('service_findings',[])+diagnostic_check.get('data_limitations',[])
+                output += '<div id="network-diagnostic-check" data-check-status="'+status+'">'
+                output += ''.join('<p>'+html.escape(str(note))+'</p>' for note in notes[:6])
+                output += diagnostics_markup+'</div>'
+            else:
+                output += diagnostics_markup
         output += cards(report, names, outlet_controls=outlet_controls) + '</div>'
     return output + '</div>'
 

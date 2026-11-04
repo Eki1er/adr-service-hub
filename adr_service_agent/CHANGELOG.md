@@ -1,5 +1,7 @@
 ## 0.24.1 — development
 
+- Make summary totals open matching systems and findings, with a clear filter and retained selection across background refreshes.
+
 - Use the configured client site timezone in dashboard, browser event history and Ask ADR.
 - Convert timestamp copies before analysis, preserving local dates and daylight-saving abbreviations; retain original journal timestamps.
 - Explain that an unchanged sensor timestamp alone does not establish stopped monitoring.
