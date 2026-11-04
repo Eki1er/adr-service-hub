@@ -1,4 +1,4 @@
-## 0.24.1 — development
+## 0.24.1
 
 - Accept seconds/milliseconds in UniFi result timestamps and avoid rejecting new results from the same start second.
 - Distinguish controller authentication/endpoint failures and stop further network requests after access denial.
