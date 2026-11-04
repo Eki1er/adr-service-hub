@@ -1,4 +1,4 @@
-## 0.24.0 — development
+## 0.24.0
 
 - Add read-only USB/NUT status and native notification subscriptions with persistent, bounded outage/restoration history for Ask ADR and report downloads.
 - Prefer configured USB monitoring over WattBox UPS polling while retaining outlet controls.
