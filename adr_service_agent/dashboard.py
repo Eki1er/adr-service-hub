@@ -4,7 +4,7 @@ import html
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from dashboard_visuals import visuals, network_panels
+from dashboard_visuals import visuals, network_panels, history_chart
 from network_health import summary as network_summary
 
 SYSTEMS = ('WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense', 'Internet')
@@ -133,6 +133,12 @@ SYSTEM_ICONS = {'Internet': 'network', 'WattBox': 'power', 'Sense': 'energy', 'U
 
 
 def tile_value(name, snapshot, lines):
+    if name == 'Internet':
+        values=[]
+        for kind in ('download','upload'):
+            row=next((r for r in snapshot.get('readings',[]) if kind in r.get('name','').lower() and r.get('unit') in ('Mbit/s','Mbps')),None)
+            values.append(kind.capitalize()+': '+(str(row['state'])+' '+row['unit'] if row else 'unverified'))
+        return ' · '.join(values)
     if name == 'WattBox':
         outlets = snapshot.get('outlets', [])
         return str(sum(o.get('on') is True for o in outlets)) + ' / ' + str(len(outlets)) + ' outlets on'
@@ -172,7 +178,7 @@ def cards(report, names=SYSTEMS, outlet_controls=""):
         stamp = display_time(check.get('post_action_verified_at') or check.get('completed_at')) if check else ''
         short_stamp = stamp.split('·')[-1].strip()
         status = check.get('status', 'unverified') if check else 'pending'
-        output += '<article id="system-' + esc(name.lower()) + '" data-check-status="' + esc(status) + '" class="system-card ' + style + (' sense-card' if name == 'Sense' else '') + '"><details class="system-tile"><summary class="tile-summary" aria-label="' + esc(name + ' readings: ' + short_label) + '">'
+        output += '<article id="system-' + esc(name.lower()) + '" data-check-status="' + esc(status) + '" class="system-card ' + style + (' sense-card' if name == 'Sense' else '') + '"><details class="system-tile"'+(' open' if name=='Internet' else '')+'><summary class="tile-summary" aria-label="' + esc(name + ' readings: ' + short_label) + '">'
         output += '<div class="tile-icon-row"><span class="system-icon">' + icon(SYSTEM_ICONS[name]) + '</span><span class="status-dot" aria-hidden="true"></span></div><h3>' + esc(name) + '</h3><span class="badge" aria-label="' + esc(label) + '">' + short_label + '</span>'
         output += '<p class="tile-value">' + esc(headline) + '</p><span class="tile-footer"><span title="' + esc(stamp) + '">' + esc(short_stamp) + '</span>' + icon('chevron') + '</span></summary><div class="tile-body">'
         if check is None:
@@ -229,6 +235,10 @@ def ups_panel(status):
         output += '<p class="measurement-warning">'+esc(status['error'])+'</p>'
     output += '<details class="ups-events"><summary>Recorded UPS events</summary>'
     events = status.get('events', [])[-12:]
+    points=[{'time':item.get('received_at'),'value':{'line_power':1,'on_battery':0}.get(item.get('state'))} for item in status.get('events',[])]
+    chart=history_chart({'name':'UPS power history','unit':'Power source','state_labels':{'0':'Battery','1':'Utility'},'points_only':True,'points':points,'status':'No recorded UPS state history yet.'})
+    # Event markers describe observations only; no continuous healthy interval is inferred.
+    output=output.replace('<details class="ups-events">',chart+'<p class="report-caption">Chart markers use receipt times. Device-reported times are listed below; gaps are not filled.</p><details class="ups-events">')
     if not events:
         output += '<p>No UPS events recorded yet.</p>'
     for item in reversed(events):
@@ -264,7 +274,8 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=
         output += '<div class="system-group group-' + key + '"><div class="section-label"><h2>' + title + '</h2></div>'
         if key == 'power': output += ups_panel(ups_status or {})
         if key == 'network':
-            output += network_panels(checks)
+            output += cards(report,('Internet',)).replace('class="system-grid"','class="system-grid internet-feature"',1)
+            output += network_panels(checks, include_internet=False)
             diagnostic_check=checks.get('Network diagnostics')
             if diagnostic_check:
                 status=html.escape(str(diagnostic_check.get('status','unverified')),quote=True)
@@ -274,6 +285,6 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=
                 output += diagnostics_markup+'</div>'
             else:
                 output += diagnostics_markup
-        output += cards(report, names, outlet_controls=outlet_controls) + '</div>'
+        output += cards(report, tuple(n for n in names if n!='Internet'), outlet_controls=outlet_controls) + '</div>'
     return output + '</div>'
 

@@ -1,5 +1,9 @@
-## 0.24.4 (development)
+## 0.24.4
 
+- Feature an expanded Internet tile at the top of Network with Green speed/latency results and source-labeled history graphs; keep UniFi gateway results separate.
+- Persist bounded WattBox outlet observations for seven days and show sampled outlet count/change history without inventing wattage or exact transition times.
+- Plot USB UPS observations as receipt-time event markers, preserving monitoring gaps and separate reported times.
+- Add Green sampled ICMP-loss and DNS-lookup timing history; render all graph axes in the configured site timezone.
 - Add a Power-view USB UPS card showing reported utility/battery state, listener gaps and the latest recorded events in the client site's timezone.
 - Separate baseline, outage/restoration and communication events; never promote last-known state to current when disconnected.
 - Add an Ask ADR tile on every view and a fifth bottom-bar shortcut, sharing one form, question and answer.

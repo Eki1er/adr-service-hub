@@ -37,6 +37,8 @@ def visuals(name, snapshot, lines):
     if not snapshot:
         return ''
     output = ''
+    if name == 'Internet':
+        return network_panels({'Internet':{'snapshot':snapshot}},include_access_points=False)
     if name in ('Araknis', 'CP4-R', 'UniFi'):
         gauges = ''
         if name == 'UniFi':
@@ -68,6 +70,15 @@ def visuals(name, snapshot, lines):
             state = 'on' if outlet.get('on') is True else 'off' if outlet.get('on') is False else 'unknown'
             output += '<span class="outlet-' + state + '" title="' + esc(str(outlet.get('label', 'Outlet')) + ': ' + state) + '">' + esc(outlet.get('number', '·')) + '</span>'
         output += '</div><small>Reported outlet power only</small>'
+        history=snapshot.get('power_history',{})
+        output += '<div class="power-history"><h4>WattBox power history</h4>'
+        if not history.get('series'):
+            output += '<p class="empty-state">Outlet history starts with the next successful system check.</p>'
+        for series in history.get('series',[])[:5]:output += history_chart(series)
+        if history.get('error'):output += '<p class="measurement-warning">'+esc(history['error'])+'</p>'
+        output += '<small>'+esc(history.get('note','Sampled outlet states, not watts or proof of equipment operation.'))+'</small></div>'
+    if name == 'UniFi' and snapshot.get('gateway_speedtest'):
+        output += network_panels({'UniFi':{'snapshot':snapshot}},include_access_points=False)
     if name == 'Sense':
         series = snapshot.get('history', {}).get('series', [])
         output += '<div class="sense-history"><h4>Past 24 hours</h4>'
@@ -99,6 +110,8 @@ def history_chart(series):
     if not valid:
         return output + '<p class="empty-state">' + esc(series.get('status', 'History unavailable')) + '</p></div>'
     low, high = min(v for _, v in valid), max(v for _, v in valid)
+    state_labels=series.get('state_labels')
+    if state_labels:low,high=0,1
     xmin, xmax = min(t for t, _ in parsed), max(t for t, _ in parsed)
     span = high - low
     ymin, ymax = (low - span * .1, high + span * .1) if span else (low - max(abs(low)*.01, .1), high + max(abs(high)*.01, .1))
@@ -118,17 +131,21 @@ def history_chart(series):
     output += '<svg class="history-chart" viewBox="0 0 308 136" role="img" aria-label="' + title + ' history, ' + f'{low:g} to {high:g} ' + unit + '"><title>' + title + ' history</title>'
     output += '<path d="M38 18V102H290" class="chart-axis"/>'
     for segment in segments:
-        if len(segment) == 1:
+        if series.get('points_only'):
+            for x,y in segment:output += f'<circle cx="{x:.2f}" cy="{y:.2f}" r="3" class="chart-point"/>'
+        elif len(segment) == 1:
             x, y = segment[0]
             output += f'<circle cx="{x:.2f}" cy="{y:.2f}" r="3" class="chart-point"/>'
         else:
             coords = ' '.join(('M' if i == 0 else 'L') + f'{x:.2f},{y:.2f}' for i, (x, y) in enumerate(segment))
             output += '<path d="' + coords + '" class="chart-line"/>'
-    output += '<text x="33" y="27" text-anchor="end">' + f'{high:.3g}' + '</text><text x="33" y="99" text-anchor="end">' + f'{low:.3g}' + '</text>'
-    try:
-        zone = ZoneInfo('America/New_York')
-    except ZoneInfoNotFoundError:
-        zone = timezone.utc
+    high_label=esc(state_labels.get(str(int(high)),str(high))) if state_labels else f'{high:.3g}'
+    low_label=esc(state_labels.get(str(int(low)),str(low))) if state_labels else f'{low:.3g}'
+    output += '<text x="33" y="27" text-anchor="end">' + high_label + '</text><text x="33" y="99" text-anchor="end">' + low_label + '</text>'
+    from dashboard import site_timezone_name
+    try:zone = ZoneInfo(site_timezone_name())
+    except (ZoneInfoNotFoundError,ValueError):
+        return output+'</svg><small>Configure the client site timezone to display history dates.</small></div>'
     first = datetime.fromtimestamp(xmin, zone)
     last = datetime.fromtimestamp(xmax, zone)
     format_time = '%m/%d %H:%M' if first.date() != last.date() else '%H:%M'
@@ -138,7 +155,7 @@ def history_chart(series):
     return output
 
 
-def network_panels(checks):
+def network_panels(checks, include_internet=True, include_access_points=True):
     uni = (checks.get('UniFi') or {}).get('snapshot') or {}
     ruckus = (checks.get('Ruckus') or {}).get('snapshot') or {}
     green = (checks.get('Internet') or {}).get('snapshot') or {}
@@ -207,7 +224,10 @@ def network_panels(checks):
             history.insert(0, {'name':name,'unit':'Mbit/s','points':[],'status':'Awaiting '+source+' results'})
     for series in history[:8]:
         output += history_chart(series)
-    output += '</div></section><h3 class="ap-heading">Access points</h3><div class="ap-grid">' 
+    output += '</div></section>'
+    if not include_access_points:return output+'</div>'
+    if not include_internet:output='<div class="network-panels">'
+    output += '<h3 class="ap-heading">Access points</h3><div class="ap-grid">'
 
     controller = ruckus.get('controller')
     if controller is not None:

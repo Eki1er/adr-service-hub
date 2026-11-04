@@ -68,6 +68,11 @@ def collect(speed=None, runner=subprocess.run, clock=time.monotonic):
         if row['latency_ms'] is not None:
             readings.append({'name': 'Green '+row['name']+' latency', 'state': row['latency_ms'],
                              'unit': 'ms', 'last_updated': completed})
+        if row['loss_percent'] is not None:
+            readings.append({'name':'Green '+row['name']+' sampled ICMP loss','state':row['loss_percent'],
+                             'unit':'%','last_updated':completed})
+    if dns['elapsed_ms'] is not None:
+        readings.append({'name':'Green DNS lookup','state':dns['elapsed_ms'],'unit':'ms','last_updated':completed})
     # A speed sample retains its own timestamp, never the current probe time.
     if isinstance(speed, dict) and speed.get('source') == 'green':
         for reading in speed.get('readings', [])[:2]:

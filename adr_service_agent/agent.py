@@ -19,6 +19,7 @@ from network_diagnostics import DiagnosticError
 from native_events import NativeEvents, MAX_IMPORT
 from usb_ups import USBUPS
 from power_events import PowerJournal, identity as power_identity
+from power_history import OutletHistory
 from monitoring import MonitoringSchedule
 from presentation import present_html
 from ui_icons import icon
@@ -244,6 +245,7 @@ class Pilot:
         self.ups_interval=interval if type(interval) is int and 5<=interval<=300 else 15
         self.ups_running=False;self.ups_next_due=time.time()+60
         self.power_journal=PowerJournal(self.data/'power_events.json',self.ups_interval)
+        self.outlet_history=OutletHistory(self.data/'outlet_history.json')
         self.native_events=NativeEvents(self.data/'native_events.json',self.araknis_options)
         self.usb_ups=USBUPS(self.data/'usb_ups_events.json',self.araknis_options)
         self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
@@ -433,6 +435,7 @@ class Pilot:
                 if self.wattbox_ups_monitoring_enabled():
                     try:inventory['power_monitor']=self.read_ups(box)
                     except ProtocolError:inventory['power_monitor']=self.power_status()
+                inventory['power_history']=self.outlet_history.observe(self.power_target(),inventory)
                 return inventory
 
         def target_id(prefix, keyfile):

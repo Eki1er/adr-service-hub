@@ -50,10 +50,10 @@ class GreenTests(unittest.TestCase):
         row={'name':'Green speed test Download','state':900,'unit':'Mbit/s','last_updated':current}
         speed={'source':'green','readings':[row]}
         result=green.collect(speed,runner=runner)
-        self.assertEqual(result['readings'],[row])
-        self.assertEqual(result['readings'][0]['last_updated'],current)
+        self.assertEqual([r for r in result['readings'] if 'speed test' in r['name']],[row])
+        self.assertEqual(next(r for r in result['readings'] if 'speed test' in r['name'])['last_updated'],current)
         row['last_updated']=(datetime.now(timezone.utc)-timedelta(days=2)).isoformat()
-        self.assertEqual(green.collect(speed,runner=runner)['readings'],[])
+        self.assertEqual([r for r in green.collect(speed,runner=runner)['readings'] if 'speed test' in r['name']],[])
 
     def test_complete_transfers_only_and_no_redirect(self):
         response=Mock(status=200)

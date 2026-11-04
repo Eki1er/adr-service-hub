@@ -1,4 +1,26 @@
-## UPS results and Ask ADR navigation (0.24.4 development)
+## UPS results and Ask ADR navigation (0.24.4)
+
+Network opens with an expanded Internet tile showing Green download/upload,
+Cloudflare/Google ICMP latency, sampled ICMP loss, DNS status and history graphs.
+The existing seven-day speed and 24-hour latency history is retained. New ICMP-loss
+and DNS-lookup timing series start on collection. Ookla results retain their own
+measurement timestamps and remain separate from the Green connectivity probes.
+UniFi gateway speed results/history remain under the UniFi tile, without mixing
+those measurements into Green results.
+
+Power shows USB UPS history as discrete markers of recorded line/battery states,
+using receipt times on the chart axis. The event list separately shows source
+reported times when available. Markers do not imply continuous monitoring between
+events or precise outage durations. Missing states are not plotted as utility power.
+
+WattBox history records actual outlet inventories collected by system checks,
+with seven-day retention and a maximum of 512 samples. The graph shows total outlets
+reported on and up to four outlets with observed changes. These are discrete
+observations, not watts/volts or proof of connected-device operation. This history
+starts with the first successful system check after the update; it cannot backfill
+past outlet states. The saved target identity isolates replacement/different devices.
+Unreadable existing history is preserved and a warning is shown. No extra device
+queries or faster polling are added. Charts use the site's timezone.
 
 Open Power to see the USB UPS status and the latest 12 recorded events. This uses
 the existing NUT status/notification listener; no new device queries or settings
