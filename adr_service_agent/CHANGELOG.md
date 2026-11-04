@@ -1,3 +1,8 @@
+## 0.24.6
+
+- Remove redundant History and Connections shortcut icons from the mobile header, leaving the ADR logo.
+- Keep the existing History and Connections sections and desktop navigation links.
+
 ## 0.24.5
 
 - Replace separate network dot plots with larger paired download/upload line charts, shared axes, colored legends and gridlines inspired by the supplied OvrC references.
