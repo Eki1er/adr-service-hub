@@ -1,5 +1,6 @@
 """On-demand read-only orchestration and evidence comparisons. No device actions."""
 from internet_quality import quality_issues
+from network_health import metrics as network_metrics
 import copy
 import re
 from datetime import datetime, timezone
@@ -31,6 +32,11 @@ def assess(name, snapshot):
     result = {'service_findings': [], 'data_limitations': [], 'observations': []}
     service, limits, notes = (result[k] for k in ('service_findings', 'data_limitations', 'observations'))
     usable = True
+    if snapshot.get('network_health'):
+        network=snapshot['network_health']
+        notes.extend(network.get('observations',[]))
+        service.extend(network.get('findings',[]))
+        limits.extend(network.get('limitations',[]))
     if name == 'Network diagnostics':
         notes.append(str(len(snapshot.get('targets', []))) + ' configured targets checked.')
         for row in snapshot.get('targets', []):
@@ -173,7 +179,7 @@ def summarize(name, snapshot):
 
 
 def metrics(name, snapshot):
-    result = {}
+    result = network_metrics(snapshot.get('network_health',{}))
     if name == 'Araknis':
         # Use one interface response only, never counters captured at a different time.
         for reading in snapshot.get('readings', []):
@@ -202,7 +208,17 @@ def compare(current, previous):
         old = previous.get(key)
         if old is None:
             continue
-        if key.startswith('rx_discards:'):
+        if key.startswith('network:'):
+            parts=key.split(':')
+            field=parts[-1]
+            # MAC addresses are retained in keys for identity, not split into
+            # device names; diagnostics never guess a name from an address.
+            location=(parts[-3]+' '+parts[-2]) if field in ('link','stp_state') or field.startswith(('rx_','tx_')) else parts[-2]
+            if field in ('link','stp_state','root') and value!=old:
+                changes.append(location+': '+field.replace('_',' ')+' changed from '+str(old)+' to '+str(value)+'. This alone does not establish a loop.')
+            elif type(value) is int and type(old) is int and value!=old:
+                changes.append(location+': '+field.replace('_',' ')+(' increased by '+str(value-old)+' (cumulative counter; no rate or cause inferred).' if value>old else ' decreased; reset or wrap unverified.'))
+        elif key.startswith('rx_discards:'):
             if value > old:
                 changes.append(key.split(':', 1)[1] + ': RX discards increased by ' + str(value - old) + ' (cumulative counter).')
             elif value < old:
@@ -213,7 +229,7 @@ def compare(current, previous):
 
 
 def run_checks(jobs, baselines, progress=lambda *_: None, secrets=(), history=(), completed=lambda *_: None):
-    report = {'format': 'adr-service-report-v1', 'agent_version': '0.23.1', 'read_only': True,
+    report = {'format': 'adr-service-report-v1', 'agent_version': '0.24.0', 'read_only': True,
         'started_at': now(), 'completed_at': None, 'checks': [],
         'limitations': ['Verified means the specified read succeeded, not that every device function is healthy.',
             'Checks run sequentially; per-check timestamps differ. No automatic retries or device actions.',

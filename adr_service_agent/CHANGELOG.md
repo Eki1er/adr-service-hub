@@ -1,3 +1,14 @@
+## 0.24.0 — development
+
+- Add a shared network-evidence format with UniFi as the primary controller adapter.
+- Read UniFi device/port STP state, error and multicast/broadcast counters, and per-network IGMP snooping settings through fixed GET-only controller routes.
+- Compare target-scoped port states and counters without interpreting cumulative counts as loss rates or storms.
+- Include bounded older STP/IGMP/loop-related native reports in Ask ADR, preserving original event and receipt times.
+- Add secondary Araknis help-gated STP, loop-protection, IGMP, MAC-count and LLDP display discovery.
+- Preserve unverified coverage for unsupported root/querier/membership fields and unconfirmed native event delivery.
+- Include the unpublished 0.23.1 cleanup. No port, root, VLAN, multicast or protection configuration changes.
+- Live UniFi key/firmware and Araknis display formats still require acceptance. USB/NUT compatibility has not been tested.
+
 ## 0.23.1 — development
 
 - Stop HTTPS connectivity probes to the configured HTTP-only WattBox.

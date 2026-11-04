@@ -36,7 +36,8 @@ from sense import collect_with_history as collect_sense, report_payload as sense
 from bluesound import collect as collect_bluesound, report_payload as bluesound_report_payload, BluesoundError
 from control4 import collect as collect_control4, report_payload as control4_report_payload, Control4Error
 from cp4 import collect as collect_cp4, settings as cp4_settings, report_payload as cp4_report_payload, CP4Error
-from araknis import settings as araknis_settings, inspect as inspect_araknis, snapshot as araknis_snapshot, discover as discover_araknis, report_payload as araknis_report_payload, AraknisError
+from araknis import settings as araknis_settings, inspect as inspect_araknis, snapshot as araknis_snapshot, discover as discover_araknis, report_payload as araknis_report_payload, AraknisError, add_network_evidence
+from unifi_network import collect as collect_unifi_network
 
 
 # Fixed, hash-authorized presentation code; background GETs never initiate device actions.
@@ -313,6 +314,7 @@ class Pilot:
 
     def collect_unifi_dashboard(self):
         snapshot = collect_unifi(self.unifi_selection.get('entry_id', ''), self.unifi_selection.get('device_id', ''))
+        snapshot['network_health'] = collect_unifi_network(self.araknis_options, self.gateway_pin)
         snapshot['internet_readings'] = []
         snapshot['internet_quality_issues'] = []
         snapshot['internet_source'] = 'unifi_gateway'
@@ -408,7 +410,8 @@ class Pilot:
             ('Crestron', self.crestron_selection, lambda: collect_crestron(self.crestron_selection)),
             ('Control4', self.control4_selection, lambda: collect_control4(self.control4_selection)),
             ('Araknis', target_id('araknis', 'araknis_known_hosts'),
-                lambda: console(araknis_settings, self.araknis_options, 'araknis_known_hosts', discover_araknis)),
+                lambda: console(araknis_settings, self.araknis_options, 'araknis_known_hosts',
+                    lambda config,keys: add_network_evidence(discover_araknis(config,keys),config,keys))),
             ('CP4-R', target_id('cp4', 'cp4_known_hosts'),
                 lambda: console(cp4_settings, self.cp4_options, 'cp4_known_hosts', collect_cp4)),
             ('Sense', 'ha-sense', collect_sense),
@@ -616,6 +619,7 @@ class Pilot:
                     result = discover_araknis(config, self.data / 'araknis_known_hosts', progress=progress)
                 else:
                     result = araknis_snapshot(config, self.data / 'araknis_known_hosts')
+                result = add_network_evidence(result, config, self.data / 'araknis_known_hosts', progress=progress)
             except AraknisError as exc:
                 error = str(exc)
             except Exception:
@@ -1032,7 +1036,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += '<meta name="adr-refresh" content="3">'
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.23.1</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.service_report
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1899,7 +1903,7 @@ def main():
     server.pilot = Pilot('/data', '/data/options.json')
     server.pilot.native_events.start()
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.23.1 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.24.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:

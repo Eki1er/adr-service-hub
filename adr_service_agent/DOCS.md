@@ -1,3 +1,65 @@
+# Network diagnostics — 0.24.0 development
+
+UniFi is the primary network adapter. It reuses the configured local gateway API
+key and approved TLS certificate. Two fixed GET-only controller routes read
+`/proxy/network/api/s/{site}/stat/device` and
+`/proxy/network/api/s/{site}/rest/networkconf`. These routes are used by the
+aiounifi client; they are not a guarantee of public Integration API stability.
+No alternate host, cookie login, redirects, API writes or automatic retries are
+introduced. Certificate validation failure stops further network reads before
+sending the API key. Compatibility and key permissions require a live check.
+
+Only normalized allowlisted device/port fields and network name/VLAN/IGMP
+snooping settings are retained. Raw network configuration may contain secrets;
+it is never saved, displayed or sent to cloud analysis. One response per route
+is bounded to 1 MB; inventories are limited to 64 devices/networks and 256 ports
+per device. Omitted rows are identified. Controller-managed inventory is not a
+LAN-wide or third-party switch inventory.
+
+Ask ADR receives shared network evidence, bounded device/port excerpts, original
+collection timestamps, coverage and report comparisons. Root bridge, active
+querier and group memberships stay unverified unless explicitly read from a
+supported source. IGMP enabled is a configuration fact, not proof of media
+stream delivery. STP blocking is an observation, not proof of an active loop.
+Error/multicast/broadcast counters are cumulative; comparisons show differences
+without assigning rates, causes, or a storm verdict. Counter decreases may be
+wraps/resets. Comparisons use this process session's successful report baselines.
+
+Native event selection includes up to 16 retained reports mentioning STP, BPDU,
+loops, topology, IGMP or multicast, even when ordinary newer messages have moved
+them beyond the generic latest-event list. This is a keyword selection of
+untrusted source reports, not fault classification. Original source and
+receipt/import timestamps are preserved; no event receipt does not prove health.
+Forwarding must be configured and verified per controller. Existing UDP source
+allowlisting and retention limits remain in force.
+
+Araknis is a secondary adapter. A separate bounded help walk starts at `show ?`;
+every command path must be both statically allowlisted and advertised by its
+parent, and execution requires complete help explicitly advertising `<CR>`.
+The additional pass is limited to 20 help probes, 8 reads, a 90-second admission
+deadline and existing per-request/page/response limits. No numeric/interface
+arguments, configuration dumps, arbitrary commands or writes are allowed.
+Unexpected display formats remain unparsed; original bounded console evidence
+is included only in the local downloadable report. Auth/identity failures stop
+this additional pass and preserve the independent ordinary health readings.
+It is not a claim of full root/querier/member coverage for every firmware.
+
+## Acceptance on Green
+
+1. Update only after the development build is reviewed and published.
+2. Run All Checks with the existing UniFi local key/certificate configured.
+3. Confirm actual switch names, port states and counter fields against UniFi.
+4. Inspect network coverage: missing root/querier/memberships must stay unverified.
+5. Forward native UniFi events and verify a real known event before relying on delivery.
+6. Ask about loops/multicast and verify the answer cites observations and limits.
+
+Tests exercise bounded reads, partial failures, trust failures, secret exclusion,
+STP blocking versus loop diagnosis, cumulative counters, target isolation,
+strict CLI help gating, and retained native network-event provenance. No live
+hardware or Docker build was tested in this workspace.
+
+## Previous unpublished cleanup — 0.23.1
+
 # Latest Araknis evidence and streamlined Ask ADR — 0.23.1 development
 
 Ask ADR now merges a newer individual Araknis diagnostic snapshot into its

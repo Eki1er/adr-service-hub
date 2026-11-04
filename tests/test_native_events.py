@@ -69,6 +69,18 @@ class Native(unittest.TestCase):
         self.assertEqual(s['sources'][0]['coverage'],'delivery_unverified')
         self.assertIsNone(s['sources'][0]['last_received_at'])
 
+    def test_network_event_selection_retains_older_reports_and_original_provenance(self):
+        self.n.accept(b'2026-11-02T16:10:00-05:00 STP port Gi0/1 blocking',SOURCE['host'])
+        for i in range(40):
+            self.time+=1.1;self.n.accept(('ordinary event '+str(i)).encode(),SOURCE['host'])
+        status=self.n.status()
+        self.assertFalse(any('STP' in e['message'] for e in status['events']))
+        self.assertEqual(len(status['network_events']),1)
+        event=status['network_events'][0]
+        self.assertEqual(event['device_time'],'2026-11-02T21:10:00+00:00')
+        self.assertNotEqual(event['received_at'],event['device_time'])
+        self.assertNotIn('loop_detected',event)
+
     def test_import_validates_entire_batch_before_mutating(self):
         source=self.n.status()['sources'][0]['id']
         for text in ('x\n'+'z'*8193,'x\n'*257,'x'*(MAX_IMPORT+1)):

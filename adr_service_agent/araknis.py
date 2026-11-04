@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 import paramiko
 from wattbox import ProtocolError
+from switch_network import PATHS as NETWORK_PATHS, collect as collect_network, analyze as analyze_network
+from network_health import base as network_base
 
 
 class AraknisError(ProtocolError):
@@ -135,7 +137,7 @@ def read_pages(channel, read_fn=receive, max_pages=8, max_chars=32768):
 
 
 def query(client, command, read_fn=receive, help_only=False):
-    if not permitted_request(command):
+    if not permitted_request(command) and not (command == 'show' and help_only) and command not in NETWORK_PATHS:
         raise AraknisError('Unsupported Araknis diagnostic request.')
     channel = client.invoke_shell(width=160, height=100)
     try:
@@ -375,6 +377,47 @@ def discover(config, keys_path, client_factory=paramiko.SSHClient, read_fn=recei
         raise AraknisError('Araknis SSH login rejected. Check the switch username and password in app Configuration.') from None
 
 
+def add_network_evidence(result, config, keys_path, progress=None,
+                         client_factory=paramiko.SSHClient, read_fn=receive):
+    """Supplement ordinary health reads with separate bounded CLI discovery."""
+    import hashlib
+    def request(command, help_only):
+        try:
+            text,partial=diagnostic_request(config,keys_path,command,client_factory,read_fn,help_only)
+            return text,partial or not response_boundary(text)
+        except (paramiko.BadHostKeyException,paramiko.AuthenticationException):
+            error=AraknisError('Switch network read stopped: verify its approved SSH identity and login.')
+            error.stop_network_collection=True
+            raise error from None
+    try:
+        collection=collect_network(request,config['password'],progress or (lambda _:None))
+        parsed=analyze_network(collection)
+        out=network_base('Araknis',parsed['checked_at'])
+        pin=keys_path.read_text()
+        out['target_id']=hashlib.sha256((config['host']+':'+str(config['port'])+pin).encode()).hexdigest()
+        stp=parsed['spanning_tree']
+        device={'id':'switch','name':'Araknis switch','type':'switch','state':'unverified','ports':[
+            dict(port=p['port'],stp_state=p['state']) for p in stp.get('ports',[])]}
+        if 'root_id' in stp:device['stp_root_id']=stp['root_id'];out['coverage']['stp_root']='response received'
+        if 'topology_changes' in stp:device['topology_changes']=stp['topology_changes']
+        out['devices']=[device]
+        out['coverage']['cli']=parsed['coverage']
+        if parsed['multicast'].get('groups'):out['coverage']['igmp_memberships']='response received'
+        if parsed['multicast'].get('querier_address'):out['coverage']['igmp_querier']='response received'
+        out['multicast']=parsed['multicast']
+        out['observations']=parsed['observations'];out['findings']=parsed['findings']
+        out['limitations']+=parsed['limitations']
+        result['network_health']=out
+        result['network_discovery']=collection
+    except AraknisError as exc:
+        result['network_health']=network_base('Araknis',datetime.now(timezone.utc).isoformat(timespec='seconds'))
+        result['network_health']['limitations'].append(str(exc))
+    except (KeyError,OSError):
+        result['network_health']=network_base('Araknis',datetime.now(timezone.utc).isoformat(timespec='seconds'))
+        result['network_health']['limitations'].append('Network diagnostics need a complete switch configuration and approved identity; existing health readings preserved.')
+    return result
+
+
 def report_payload(result, password):
     def clean(value):
         if isinstance(value, str):
@@ -384,7 +427,7 @@ def report_payload(result, password):
         if isinstance(value, dict):
             return {key: clean(item) for key, item in value.items()}
         return value
-    return {'format': 'adr-araknis-discovery-v1', 'agent_version': '0.19.1',
+    return {'format': 'adr-araknis-discovery-v1', 'agent_version': '0.24.0',
         'read_only': True, 'snapshot': clean(result),
         'limitations': ['Command syntax and raw values are reported, not a health verdict.',
             'No running configuration, app options, credentials or SSH keys are included.',

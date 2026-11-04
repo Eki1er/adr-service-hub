@@ -1,3 +1,10 @@
+## Development: network diagnostics 0.24.0
+
+UniFi-first read-only network evidence, STP port-state/counter comparisons,
+multicast configuration and retained native event context for Ask ADR.
+Araknis is a secondary help-gated CLI adapter. Main remains 0.23.0; no live
+network or USB compatibility is claimed. See `adr_service_agent/DOCS.md`.
+
 ## Development: native event ingestion 0.23.0
 
 Adds opt-in native syslog ingestion and explicit text-log imports, with device

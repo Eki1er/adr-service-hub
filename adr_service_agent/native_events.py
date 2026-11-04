@@ -214,6 +214,8 @@ class NativeEvents:
                 'coverage':'events_received_this_session' if s['id'] in self.last_received else 'delivery_unverified'} for s in self.sources.values()]
             return {'enabled':self.enabled,'listener_running':self.running,'started_at':self.started_at,'error':self.error,
                 'sources':coverage,'events':copy.deepcopy(self.events[-30:]),'rejected':self.rejected,'rate_dropped':self.rate_dropped,'duplicates':self.duplicates,
+                'network_events':copy.deepcopy([e for e in self.events if re.search(r'\b(?:STP|RSTP|MSTP|BPDU|IGMP|multicast|querier|loop|topology|MAC flapp\w*)\b',
+                    str(e.get('event_name',''))+' '+str(e.get('message','')),re.I)][-16:]),
                 'limitations':['No events received does not establish that equipment is healthy.',
                     'UDP forwarding is lossy and source IPs can be spoofed; messages are untrusted device reports.',
                     'Device time may be missing, unsynchronized or ambiguous; receipt time is kept separately.',

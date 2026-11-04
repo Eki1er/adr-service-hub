@@ -20,6 +20,10 @@ class GatewayError(ProtocolError):
     pass
 
 
+class GatewayTrustError(GatewayError):
+    pass
+
+
 def settings(options):
     host = str(options.get('unifi_gateway_host', '')).strip()
     port = options.get('unifi_gateway_port', 443)
@@ -43,11 +47,13 @@ def target(config, pin):
 
 def request(config, pin, method, operation):
     routes = {'results':('GET', '/proxy/network/v2/api/site/' + config['site'] + '/speedtest'),
-        'start':('POST', '/proxy/network/api/s/' + config['site'] + '/cmd/devmgr')}
+        'start':('POST', '/proxy/network/api/s/' + config['site'] + '/cmd/devmgr'),
+        'devices':('GET', '/proxy/network/api/s/' + config['site'] + '/stat/device'),
+        'networks':('GET', '/proxy/network/api/s/' + config['site'] + '/rest/networkconf')}
     if operation not in routes or method != routes[operation][0]:
         raise GatewayError('Unsupported gateway operation.')
-    if pin.get('host') != config['host'] or pin.get('port') != config['port'] or not re.fullmatch(r'[a-f0-9]{64}', str(pin.get('sha256',''))):
-        raise GatewayError('Inspect and approve the UniFi gateway certificate in Connections first.')
+    if not isinstance(pin,dict) or pin.get('host') != config['host'] or pin.get('port') != config['port'] or not re.fullmatch(r'[a-f0-9]{64}', str(pin.get('sha256',''))):
+        raise GatewayTrustError('Inspect and approve the UniFi gateway certificate in Connections first.')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
@@ -56,7 +62,7 @@ def request(config, pin, method, operation):
         connection.connect()
         digest = hashlib.sha256(connection.sock.getpeercert(binary_form=True)).hexdigest()
         if digest != pin['sha256']:
-            raise GatewayError('UniFi gateway certificate changed. API key was not sent.')
+            raise GatewayTrustError('UniFi gateway certificate changed. API key was not sent.')
         body = json.dumps({'cmd':'speedtest'}) if operation == 'start' else None
         connection.request(method,routes[operation][1],body=body,
             headers={'X-API-KEY':config['api_key'],'Accept':'application/json','Content-Type':'application/json'})
@@ -147,3 +153,4 @@ def run(options, pin, request_fn=request, wait_fn=time.sleep):
         'fresh_values_confirmed':False,'quality_issues':[],'source':'unifi_gateway','gateway':result,
         'measurement_quality':'unverified','note':'UniFi accepted the request; a new completed result was not confirmed.',
         'limitations':['A new UniFi result was not confirmed within two minutes. The test may still be running; no second test was started.']}
+

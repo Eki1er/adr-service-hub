@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dashboard_visuals import visuals, network_panels
+from network_health import summary as network_summary
 
 SYSTEMS = ('WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense')
 
@@ -67,6 +68,8 @@ def key_readings(name, snapshot):
         elif name in ('Bluesound', 'Sonos'):
             for reading in readings[:8]:
                 lines.append(str(reading.get('name', 'Player')) + ': ' + str(reading.get('state', 'unknown')))
+    if snapshot.get('network_health'):
+        lines = network_summary(snapshot['network_health']) + lines
     return lines[:8]
 
 

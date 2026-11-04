@@ -57,6 +57,7 @@ def evidence(report, options, power=None, native=None, individual=None):
     if native and native.get('enabled'):
         out['native_events']={k:native.get(k) for k in ('listener_running','started_at','error','sources','rate_dropped','limitations')}
         out['native_events']['events']=[{k:v[:400] if k=='message' else v for k,v in e.items()} for e in native.get('events',[])[-12:]]
+        out['native_events']['network_events']=[{k:v[:400] if k=='message' else v for k,v in e.items()} for e in native.get('network_events',[])[-16:]]
     out['summaries']=[]
     for item in checks[:20]:
         snapshot=item.get('snapshot') or {}
@@ -66,7 +67,24 @@ def evidence(report, options, power=None, native=None, individual=None):
             'responses_received':sum(isinstance(row,dict) and row.get('status')=='response received' for row in snapshot.get('readings',[])),
             'readings':[display_text(str(v)[:250]) for v in key_readings(item.get('system'),snapshot)[:12]],
             'findings':[display_text(str(v)[:250]) for v in item.get('service_findings',[])[:6]],
+            'comparisons':[display_text(str(v)[:250]) for v in item.get('comparisons',[])[:8]],
             'limitations':[display_text(str(v)[:250]) for v in item.get('data_limitations',[])[:4]]})
+    out['network_health']=[]
+    for item in checks:
+        network=(item.get('snapshot') or {}).get('network_health')
+        if not isinstance(network,dict):continue
+        # Fixed normalized fields only, never controller config/console output.
+        row={k:network.get(k) for k in ('vendor','checked_at','coverage','multicast') if k in network}
+        row['devices']=[]
+        for d in network.get('devices',[])[:4]:
+            device={k:d[k] for k in ('id','name','type','state','uptime_seconds','stp_priority','stp_protocol','stp_root_id','topology_changes') if k in d}
+            device['ports']=[{k:p[k] for k in ('port','name','link','speed_mbps','stp_state','rx_errors','tx_errors','rx_dropped','tx_dropped','rx_broadcast','tx_broadcast','rx_multicast','tx_multicast') if k in p} for p in d.get('ports',[])[:24]]
+            row['devices'].append(device)
+        row['networks']=network.get('networks',[])[:16]
+        row['findings']=network.get('findings',[])[:8]
+        row['limitations']=network.get('limitations',[])[:8]
+        row['evidence_limited']=len(network.get('devices',[]))>4 or any(len(d.get('ports',[]))>24 for d in network.get('devices',[])[:4])
+        out['network_health'].append(row)
     private=[v for k,v in options.items() if any(w in k for w in ('password','api_key','token')) and isinstance(v,str) and v]
     return redact(out,private)
 
