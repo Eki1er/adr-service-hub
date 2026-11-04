@@ -20,6 +20,10 @@ class GatewayError(ProtocolError):
     pass
 
 
+class GatewayAuthenticationError(GatewayError):
+    pass
+
+
 class GatewayTrustError(GatewayError):
     pass
 
@@ -68,6 +72,10 @@ def request(config, pin, method, operation):
             headers={'X-API-KEY':config['api_key'],'Accept':'application/json','Content-Type':'application/json'})
         response = connection.getresponse()
         raw = response.read(1024*1024+1)
+        if response.status in (401,403):
+            raise GatewayAuthenticationError('UniFi rejected access to the controller endpoint (HTTP '+str(response.status)+'). The configured API key may not authorize this older controller API. Check the gateway connection method; no login fallback or retry was attempted.')
+        if response.status == 404:
+            raise GatewayError('UniFi controller endpoint was not found (HTTP 404). Check Network-version compatibility and site selection; no retry was made.')
         if response.status != 200 or len(raw)>1024*1024:
             raise GatewayError('UniFi gateway API request failed (HTTP ' + str(response.status) + '). Check local API-key access and firmware compatibility; no retry was made.')
         result = json.loads(raw)
@@ -105,7 +113,7 @@ def normalize(body, wan='WAN', now=None):
             continue
         stamp=value(e.get('time'))
         if stamp is None:continue
-        try: dt=datetime.fromtimestamp(stamp/1000,timezone.utc)
+        try: dt=datetime.fromtimestamp(stamp/1000 if stamp>=1_000_000_000_000 else stamp,timezone.utc)
         except (ValueError,OverflowError,OSError):continue
         if dt.year<2020 or (dt-now).total_seconds()>60:continue
         down=value(e.get('download_mbps',e.get('xput_down')))
@@ -145,7 +153,7 @@ def run(options, pin, request_fn=request, wait_fn=time.sleep):
     for _ in range(12):
         wait_fn(10)
         result=collect(options,pin,request_fn)
-        if result['records'] and result['records'][-1]['time']>previous and datetime.fromisoformat(result['records'][-1]['time'])>=started:
+        if result['records'] and result['records'][-1]['time']>previous and datetime.fromisoformat(result['records'][-1]['time'])>=started.replace(microsecond=0):
             return {'started_at':started.isoformat(),'completed_at':datetime.now(timezone.utc).isoformat(),
                 'readings':result['readings'],'fresh_values_confirmed':True,'quality_issues':[], 'source':'unifi_gateway',
                 'measurement_quality':'no issue established','note':'Measured by the UniFi gateway on the primary WAN.','limitations':[],'gateway':result}

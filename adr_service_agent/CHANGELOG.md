@@ -1,5 +1,8 @@
 ## 0.24.1 — development
 
+- Accept seconds/milliseconds in UniFi result timestamps and avoid rejecting new results from the same start second.
+- Distinguish controller authentication/endpoint failures and stop further network requests after access denial.
+
 - Make summary totals open matching systems and findings, with a clear filter and retained selection across background refreshes.
 
 - Use the configured client site timezone in dashboard, browser event history and Ask ADR.

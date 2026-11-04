@@ -155,3 +155,13 @@ class CLIHealth(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class AuthenticationStop(unittest.TestCase):
+    def test_no_second_controller_read_after_authentication_denial(self):
+        request=Mock(side_effect=unifi_network.GatewayAuthenticationError('UniFi access denied (HTTP 403).'))
+        options={'unifi_gateway_host':'192.0.2.5','unifi_gateway_api_key':'private-key'}
+        result=unifi_network.collect(options,{'sha256':'a'*64},request)
+        request.assert_called_once()
+        self.assertIn('HTTP 403',' '.join(result['limitations']))
+        self.assertNotIn('private-key',json.dumps(result))

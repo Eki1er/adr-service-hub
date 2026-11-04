@@ -5,7 +5,7 @@ public Integration API. Exact key/firmware compatibility needs a live check.
 """
 from datetime import datetime,timezone
 from network_health import base,unifi_devices,unifi_networks
-from unifi_gateway import settings,request,target,GatewayError,GatewayTrustError
+from unifi_gateway import settings,request,target,GatewayError,GatewayTrustError,GatewayAuthenticationError
 
 
 def collect(options,pin,request_fn=request):
@@ -22,6 +22,9 @@ def collect(options,pin,request_fn=request):
             body=request_fn(config,pin,'GET',operation)
             if body.get('meta',{}).get('rc')!='ok':raise ValueError()
             normalize(body.get('data'),out)
+        except GatewayAuthenticationError as exc:
+            out['limitations'].append(str(exc))
+            break
         except GatewayTrustError:
             out['limitations'].append('UniFi network reads stopped: approve the current gateway certificate in Connections. API key was not sent.')
             break

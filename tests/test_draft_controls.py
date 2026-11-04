@@ -197,12 +197,41 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(gateway.normalize({'data':[dict(self.row(),download_mbps='nan')]}),[])
         self.assertEqual(gateway.normalize({'data':[dict(self.row(),time=1000)]}),[])
 
+    def test_seconds_and_milliseconds_both_keep_valid_results(self):
+        millis=self.row()
+        seconds=dict(millis,time=millis['time']/1000)
+        self.assertEqual(gateway.normalize({'data':[millis]}),gateway.normalize({'data':[seconds]}))
+
+    def test_new_result_in_start_second_is_not_rejected_for_subsecond_precision(self):
+        start=datetime(2026,11,4,3,0,0,900000,tzinfo=timezone.utc)
+        old=self.row(start-timedelta(hours=1));new=self.row(start.replace(microsecond=0))
+        count=[0]
+        def request(c,p,m,o):
+            if o=='start':return {'meta':{'rc':'ok'}}
+            count[0]+=1
+            return {'data':[old] if count[0]==1 else [new]}
+        with patch('unifi_gateway.datetime') as date:
+            date.now.return_value=start;date.fromtimestamp.side_effect=datetime.fromtimestamp
+            date.fromisoformat.side_effect=datetime.fromisoformat
+            result=gateway.run(self.options(),{},request,lambda _:None)
+        self.assertTrue(result['fresh_values_confirmed'])
+
     def test_pin_mismatch_prevents_key_being_sent(self):
         config=gateway.settings(self.options());pin={'host':config['host'],'port':443,'sha256':'a'*64}
         connection=Mock();connection.sock.getpeercert.return_value=b'wrong-cert'
         with patch('unifi_gateway.http.client.HTTPSConnection',return_value=connection):
             with self.assertRaises(gateway.GatewayError):gateway.request(config,pin,'GET','results')
         connection.request.assert_not_called()
+
+    def test_access_denial_has_actionable_error_without_credentials(self):
+        config=gateway.settings(self.options());cert=b'trusted'
+        pin={'host':config['host'],'port':443,'sha256':hashlib.sha256(cert).hexdigest()}
+        connection=Mock();connection.sock.getpeercert.return_value=cert
+        connection.getresponse.return_value=SimpleNamespace(status=401,read=lambda n:b'{}')
+        with patch('unifi_gateway.http.client.HTTPSConnection',return_value=connection):
+            with self.assertRaises(gateway.GatewayAuthenticationError) as caught:gateway.request(config,pin,'GET','results')
+        self.assertIn('HTTP 401',str(caught.exception));self.assertNotIn('private-key',str(caught.exception))
+        connection.request.assert_called_once();connection.close.assert_called_once()
 
     def test_gateway_read_is_get_only_and_no_legacy_source(self):
         request=Mock(return_value={'data':[self.row()]})
