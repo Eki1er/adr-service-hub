@@ -1101,7 +1101,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
     text += '<meta name="adr-site-timezone" content="'+esc(site_timezone_name())+'">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.3</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr" data-ask-shortcut>{icon("ask")}<span>Ask ADR</span></a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.4</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.current_service_report()
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1159,23 +1159,22 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += progress_markup
     elif progress_markup:
         text += '<details class="run-history"><summary>Check history</summary>' + progress_markup + '</details>'
-    if report or not pilot.service_running:
-        outlet_markup = ''
-        wb_check = next((c for c in (report or {}).get('checks', []) if c.get('system')=='WattBox'), {})
-        wb_snapshot = wb_check.get('snapshot') or {}
-        if wb_snapshot.get('power_action_pending_read'):
-            outlet_markup += '<p class="measurement-warning">' + ('Checking outlet power…' if pilot.active else 'Outlet power remains unverified. Run All Checks.') + '</p>'
-        for outlet in wb_snapshot.get('outlets', []):
-            if type(outlet.get('number')) is not int or not 1<=outlet['number']<=18: continue
-            outlet_markup += '<div class="outlet-row"><div><strong>' + str(outlet['number']) + ' · ' + esc(outlet.get('label','Outlet')) + '</strong><small>' + ('Awaiting read' if wb_snapshot.get('power_action_pending_read') else 'On' if outlet.get('on') is True else 'Off' if outlet.get('on') is False else 'Unknown') + '</small></div><div class="outlet-actions">'
-            for action, label in (('ON','On'),('OFF','Off'),('RESET','Restart')):
-                outlet_markup += form('outlet-prepare', label, '<input type="hidden" name="outlet" value="' + str(outlet['number']) + '"><input type="hidden" name="operation" value="' + action + '">', danger=action!='ON', disabled=pilot.active or pilot.araknis_options.get('allow_outlet_control') is not True)
-            outlet_markup += '</div></div>'
-        if pilot.araknis_options.get('allow_outlet_control') is not True:
-            outlet_markup += '<p class="report-caption">Enable allow_outlet_control in Configuration to use outlet controls.</p>'
-        network_diagnostics_markup, assistant_markup = diagnostic_panels(pilot.diagnostics, pilot.csrf)
-        text += grouped_cards(report, outlet_controls=outlet_markup, diagnostics_markup=network_diagnostics_markup)
-        text += assistant_markup
+    outlet_markup = ''
+    wb_check = next((c for c in (report or {}).get('checks', []) if c.get('system')=='WattBox'), {})
+    wb_snapshot = wb_check.get('snapshot') or {}
+    if wb_snapshot.get('power_action_pending_read'):
+        outlet_markup += '<p class="measurement-warning">' + ('Checking outlet power…' if pilot.active else 'Outlet power remains unverified. Run All Checks.') + '</p>'
+    for outlet in wb_snapshot.get('outlets', []):
+        if type(outlet.get('number')) is not int or not 1<=outlet['number']<=18: continue
+        outlet_markup += '<div class="outlet-row"><div><strong>' + str(outlet['number']) + ' · ' + esc(outlet.get('label','Outlet')) + '</strong><small>' + ('Awaiting read' if wb_snapshot.get('power_action_pending_read') else 'On' if outlet.get('on') is True else 'Off' if outlet.get('on') is False else 'Unknown') + '</small></div><div class="outlet-actions">'
+        for action, label in (('ON','On'),('OFF','Off'),('RESET','Restart')):
+            outlet_markup += form('outlet-prepare', label, '<input type="hidden" name="outlet" value="' + str(outlet['number']) + '"><input type="hidden" name="operation" value="' + action + '">', danger=action!='ON', disabled=pilot.active or pilot.araknis_options.get('allow_outlet_control') is not True)
+        outlet_markup += '</div></div>'
+    if pilot.araknis_options.get('allow_outlet_control') is not True:
+        outlet_markup += '<p class="report-caption">Enable allow_outlet_control in Configuration to use outlet controls.</p>'
+    network_diagnostics_markup, assistant_markup = diagnostic_panels(pilot.diagnostics, pilot.csrf)
+    text += grouped_cards(report, outlet_controls=outlet_markup, diagnostics_markup=network_diagnostics_markup, ups_status=pilot.usb_ups.status())
+    text += assistant_markup
     text += monitoring_panel(pilot) + network_tools
     text += '</section>'
     if pilot.service_history:

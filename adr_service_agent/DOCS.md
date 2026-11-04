@@ -1,3 +1,29 @@
+## UPS results and Ask ADR navigation (0.24.4 development)
+
+Open Power to see the USB UPS status and the latest 12 recorded events. This uses
+the existing NUT status/notification listener; no new device queries or settings
+are introduced. The card covers reported line/battery status and history, not
+additional charge, load, voltage or runtime sensors. Those remain available in
+the underlying UPS integration and any separately collected WattBox readings.
+
+Disconnected or errored monitoring shows current power status as unverified.
+A connected listener alone is not a UPS heartbeat. Baseline records are labeled
+as baselines, not outages/restorations. Reported and receipt times remain separate;
+missing source timestamps are not invented. All dates use site_timezone. The
+existing listener may miss brief events or events before monitoring started.
+
+Ask ADR has an Overview tile, a compact tile on each category view, a sidebar
+shortcut and a fifth bottom-bar item on mobile. All jump to the same Ask ADR form,
+which remains available during system checks. Changing views does not create a
+new conversation or reset the question/answer. Shortcuts only navigate; they do
+not start microphone capture, submit questions, run checks or control equipment.
+The existing background refresh preserves the shared Ask form.
+
+Automated checks cover markup uniqueness, initial running-check navigation,
+UPS event timestamps/baselines/disconnections, bounded escaped history and Ask
+navigation without network actions. Mobile layout has not yet been tested on
+the live Green ingress page.
+
 ## Ookla SpeedTest add-on provider (0.24.3)
 
 Install https://github.com/MrSuicideParrot/hassio-speedtest-addon separately and

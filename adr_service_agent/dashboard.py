@@ -208,7 +208,43 @@ GROUPS = (('power', 'Power', ('WattBox', 'Sense')),
     ('av', 'AV/Automation', ('Sonos', 'Bluesound', 'Crestron', 'CP4-R', 'Control4')))
 
 
-def grouped_cards(report, outlet_controls="", diagnostics_markup=""):
+def ups_panel(status):
+    esc = lambda value: html.escape(str(value), quote=True)
+    labels = {'line_power':'Utility power reported', 'on_battery':'Running on battery', 'unverified':'Power status unverified'}
+    kinds = {'baseline':'Monitoring baseline', 'on_battery':'Switched to battery',
+        'line_power_restored':'Returned to utility power', 'status_unverified':'Power status unverified',
+        'monitoring_gap':'Monitoring gap', 'low_battery':'Low battery reported',
+        'replace_battery':'Replace battery reported', 'forced_shutdown':'Forced shutdown reported',
+        'shutdown':'Shutdown reported', 'communications_restored':'Communication restored'}
+    output = '<section id="ups-results" class="ups-panel"><h3>UPS</h3>'
+    if not status.get('enabled'):
+        return output+'<p>USB UPS monitoring is not configured. Select the UPS status reading in Configuration.</p></section>'
+    current = status.get('current') if status.get('status') == 'reported' else 'unverified'
+    output += '<p class="ups-current"><strong>'+esc(labels.get(current, labels['unverified']))+'</strong></p>'
+    last = status.get('last_state') or {}
+    if last:
+        output += '<p>Last status report: '+esc(display_time(last.get('reported_at') or last.get('received_at')))+'</p>'
+    output += '<p class="report-caption">'+('UPS monitor connected. A connection alone does not verify a fresh UPS reading.' if status.get('listener_connected') else 'UPS monitor disconnected. Last known readings do not establish current power status.')+'</p>'
+    if status.get('error'):
+        output += '<p class="measurement-warning">'+esc(status['error'])+'</p>'
+    output += '<details class="ups-events"><summary>Recorded UPS events</summary>'
+    events = status.get('events', [])[-12:]
+    if not events:
+        output += '<p>No UPS events recorded yet.</p>'
+    for item in reversed(events):
+        kind = item.get('kind', '')
+        output += '<div class="ups-event"><strong>'+esc(kinds.get(kind, 'UPS observation'))+'</strong>'
+        if kind == 'baseline': output += '<span>'+esc(labels.get(item.get('state'), labels['unverified']))+'; this is not an outage or restoration.</span>'
+        if item.get('reported_at'):
+            output += '<span>Reported '+esc(display_time(item['reported_at']))+'</span>'
+        else:
+            output += '<span>Event time unreported</span>'
+        output += '<small>Received '+esc(display_time(item.get('received_at')))+'</small></div>'
+    output += '</details><p class="report-caption">Monitoring gaps and brief events can be missed. This history starts when monitoring begins.</p></section>'
+    return output
+
+
+def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None):
     checks = {c['system']: c for c in (report or {}).get('checks', [])}
     output = '<div class="dashboard-groups" id="systems">'
     for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS]:
@@ -219,12 +255,14 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup=""):
         read = sum(checks.get(name, {}).get('status') == 'verified' for name in names)
         status = str(review) + ' review' if review else str(read) + ' read' if read else 'Not checked'
         output += '<label class="category-tile category-' + key + '" for="view-' + key + '"><span>' + icon(key if key != 'av' else 'av') + '</span><strong>' + ('AV/Automation' if key == 'av' else title) + '</strong><small>' + status + '</small></label>'
+    output += '<a class="category-tile ask-tile" href="#ask-adr" data-ask-shortcut><span>'+icon('ask')+'</span><strong>Ask ADR</strong><small>Speak or ask about this site</small></a>'
     output += '</div><nav class="group-tabs" aria-label="System views">'
     for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS]:
         output += '<label for="view-' + key + '" aria-label="' + title + '">' + icon('home' if key == 'all' else key) + '<span>' + ('AV/Automation' if key == 'av' else title) + '</span></label>'
-    output += '</nav>'
+    output += '<a class="ask-nav" href="#ask-adr" data-ask-shortcut aria-label="Ask ADR">'+icon('ask')+'<span>Ask ADR</span></a></nav>'
     for key, title, names in GROUPS:
         output += '<div class="system-group group-' + key + '"><div class="section-label"><h2>' + title + '</h2></div>'
+        if key == 'power': output += ups_panel(ups_status or {})
         if key == 'network':
             output += network_panels(checks)
             diagnostic_check=checks.get('Network diagnostics')

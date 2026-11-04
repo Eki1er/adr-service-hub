@@ -43,6 +43,8 @@
     if(value)(matches[0]||document.getElementById('summary-filter-status'))?.scrollIntoView({behavior:'auto',block:'start'});
   }
   document.addEventListener('click',event=>{
+    const ask=event.target.closest('a[data-ask-shortcut]');
+    if(ask){event.preventDefault();selectSummaryFilter('');document.getElementById('ask-adr')?.scrollIntoView({behavior:'auto',block:'start'});return;}
     const button=event.target.closest('button[data-summary-filter]');
     if(button){event.preventDefault();selectSummaryFilter(button.dataset.summaryFilter);return;}
     if(event.target.closest('#summary-filter-clear')){event.preventDefault();selectSummaryFilter('');}

@@ -1,6 +1,7 @@
 """Small inline outline icons for the local dashboard."""
 
 PATHS = {
+    'ask': '<path d="M21 11a8 8 0 0 1-8 8H7l-5 3 2-6a8 8 0 0 1-1-5 9 9 0 0 1 18 0z"/><path d="M8 10h8M8 14h5"/>',
     'home': '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
     'power': '<path d="M12 3v8M6.3 5.8a9 9 0 1 0 11.4 0"/>',
     'energy': '<path d="m13 2-8 12h6l-1 8 9-13h-6z"/>',
@@ -18,3 +19,4 @@ PATHS = {
 
 def icon(name):
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + PATHS.get(name, PATHS['home']) + '</svg>'
+

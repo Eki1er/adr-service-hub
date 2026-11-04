@@ -6,7 +6,8 @@ const groups=cards.map(card=>{const g=node();g.querySelector=()=>card.classList.
 const buttons=['verified','review','unverified'].map(status=>{const b=node();b.dataset.summaryFilter=status;return b;});
 const note=node(),clear=node(),all={checked:false};
 const main=node();main.querySelectorAll=s=>s==='[data-check-status]'?cards:s==='.system-group'?groups:buttons;
-const document={forms:[],hidden:false,querySelector:s=>s==='main'?main:null,querySelectorAll:()=>[],getElementById:id=>({'view-all':all,'summary-filter-status':note,'summary-filter-clear':clear}[id]),addEventListener:(name,fn)=>(handlers[name]??=[]).push(fn)};
+const askPanel={scrolled:false,scrollIntoView(){this.scrolled=true;}};
+const document={forms:[],hidden:false,querySelector:s=>s==='main'?main:null,querySelectorAll:()=>[],getElementById:id=>({'ask-adr':askPanel,'view-all':all,'summary-filter-status':note,'summary-filter-clear':clear}[id]),addEventListener:(name,fn)=>(handlers[name]??=[]).push(fn)};
 const window={};window.parent=window;
 vm.runInNewContext(fs.readFileSync('adr_service_agent/dashboard_live.js','utf8'),{document,window,location:{pathname:'/test'},sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},addEventListener(){},matchMedia:()=>({matches:false}),setTimeout(){},setInterval(){},Intl,Date,fetch(){calls++;}});
 function click(button,selector='button[data-summary-filter]'){for(const fn of handlers.click)fn({preventDefault(){},target:{closest:s=>s===selector?button:null}});}
@@ -16,4 +17,5 @@ click(clear,'#summary-filter-clear');assert.equal(main.dataset.summaryFilter,und
 click(buttons[2]);assert.equal(cards[2].scrolled,true);
 for(const fn of handlers.change)fn({target:{checked:true,id:'view-network',matches:()=>true}});
 assert.equal(main.dataset.summaryFilter,undefined);assert.equal(calls,0);
+click(buttons[1]);all.checked=false;click({},'a[data-ask-shortcut]');assert.equal(askPanel.scrolled,true);assert.equal(all.checked,false);assert.equal(main.dataset.summaryFilter,undefined);assert.equal(calls,0);
 console.log('Summary navigation passed: matching systems, expanded findings, clear filter, category navigation, no device/network actions.');

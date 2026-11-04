@@ -1,3 +1,10 @@
+## 0.24.4 (development)
+
+- Add a Power-view USB UPS card showing reported utility/battery state, listener gaps and the latest recorded events in the client site's timezone.
+- Separate baseline, outage/restoration and communication events; never promote last-known state to current when disconnected.
+- Add an Ask ADR tile on every view and a fifth bottom-bar shortcut, sharing one form, question and answer.
+- Keep Ask ADR and navigation available during the first running system check; shortcuts clear summary filters without changing the selected view or starting a recording/request.
+
 ## 0.24.3
 
 - Add an explicit Ookla SpeedTest add-on provider for Green, independent of UniFi gateway tests.
