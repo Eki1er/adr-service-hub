@@ -23,6 +23,7 @@ from monitoring import MonitoringSchedule
 from presentation import present_html
 from ui_icons import icon
 from internet_test import InternetTestError
+from green_network import collect as collect_green_network, run as run_green_test
 from unifi_gateway import collect as collect_gateway, run as run_gateway_test, settings as gateway_settings, target as gateway_target, GatewayError
 from network_history import append as append_network_history
 from outlet_control import prepare as prepare_outlet, execute as execute_outlet
@@ -143,6 +144,21 @@ class Pilot:
         self.internet_test = None
         self.internet_test_running = False
         self.internet_test_error = None
+        self.green_snapshot = None
+        self.green_speed = None
+        self.green_history = {}
+        try:
+            saved_path = self.data / 'green_speed_test.json'
+            if saved_path.stat().st_size < 16384:
+                saved = json.loads(saved_path.read_text())
+                if saved.get('source') == 'green': self.green_speed = saved
+        except (OSError, ValueError, AttributeError): pass
+        try:
+            saved_path = self.data / 'green_network_history.json'
+            if saved_path.stat().st_size < 1048576:
+                self.green_history = json.loads(saved_path.read_text())
+                if not isinstance(self.green_history,dict): self.green_history = {}
+        except (OSError, ValueError): pass
         self.controller_result = None
         self.controller_error = None
         self.controller_running = False
@@ -230,7 +246,7 @@ class Pilot:
         self.native_events=NativeEvents(self.data/'native_events.json',self.araknis_options)
         self.usb_ups=USBUPS(self.data/'usb_ups_events.json',self.araknis_options)
         self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
-            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status(), self.native_events.status(), {'Araknis':self.araknis_diagnostics}, usb_ups=self.usb_ups.status()))
+            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status(), self.native_events.status(), {'Araknis':self.araknis_diagnostics, 'Internet':self.green_snapshot}, usb_ups=self.usb_ups.status()))
         self.monitor = MonitoringSchedule(self.araknis_options, self.data / 'monitoring_state.json')
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
@@ -317,6 +333,29 @@ class Pilot:
         except Exception:
             self.ups_running=False
             raise ProtocolError('UPS check could not start.') from None
+
+    def collect_green_dashboard(self):
+        snapshot = collect_green_network(self.green_speed)
+        snapshot['network_history'] = append_network_history(self.green_history, 'green', snapshot['readings'])
+        atomic_json(self.data / 'green_network_history.json', self.green_history)
+        self.green_snapshot = snapshot
+        return snapshot
+
+    def current_service_report(self):
+        report = self.service_report
+        if not report or not self.green_snapshot:
+            return report
+        old = next((c for c in report['checks'] if c['system'] == 'Internet'), None)
+        if old and str(old.get('completed_at', '')) >= self.green_snapshot['checked_at']:
+            return report
+        from service_report import assess
+        row = dict(system='Internet', snapshot=self.green_snapshot,
+                   completed_at=self.green_snapshot['checked_at'],
+                   evidence_source='individual_diagnostic', **assess('Internet', self.green_snapshot))
+        merged = dict(report, checks=[c for c in report['checks'] if c['system'] != 'Internet']+[row])
+        merged['counts'] = {status:sum(c['status']==status for c in merged['checks'])
+                            for status in ('verified','review','unverified')}
+        return merged
 
     def collect_unifi_dashboard(self):
         snapshot = collect_unifi(self.unifi_selection.get('entry_id', ''), self.unifi_selection.get('device_id', ''))
@@ -421,6 +460,7 @@ class Pilot:
             ('CP4-R', target_id('cp4', 'cp4_known_hosts'),
                 lambda: console(cp4_settings, self.cp4_options, 'cp4_known_hosts', collect_cp4)),
             ('Sense', 'ha-sense', collect_sense),
+            ('Internet', 'green', self.collect_green_dashboard),
         ]
         if self.araknis_options.get('diagnostics_enabled') is True:
             identity = hashlib.sha256(json.dumps([self.araknis_options.get('allowed_subnets', []), self.araknis_options.get('targets', []), self.araknis_options.get('dns_name', 'example.com')], sort_keys=True).encode()).hexdigest()
@@ -540,7 +580,7 @@ class Pilot:
         self.result = 'Online status code saved for this pinned Ruckus controller. Run All Checks to update the AP cards.'
         self.audit('ruckus_online_code_verified')
 
-    def start_network_job(self, kind, scheduled=False):
+    def start_network_job(self, kind, scheduled=False, source='green'):
         if kind not in ('internet_test', 'controller'):
             raise ProtocolError('Unsupported network check.')
         if any((self.service_running, self.internet_test_running, self.controller_running, self.active, self.araknis_running, self.cp4_running, self.crestron_running, self.control4_running, self.bluesound_running, self.sense_running)):
@@ -557,7 +597,11 @@ class Pilot:
         def job():
             result, error = None, None
             try:
-                result = run_gateway_test(self.araknis_options, self.gateway_pin) if kind == 'internet_test' else collect_controller(config, self.controller_pin)
+                result = (run_green_test() if source == 'green' else run_gateway_test(self.araknis_options, self.gateway_pin)) if kind == 'internet_test' else collect_controller(config, self.controller_pin)
+                if kind == 'internet_test' and source == 'green':
+                    self.green_speed = result
+                    atomic_json(self.data / 'green_speed_test.json', result)
+                    self.collect_green_dashboard()
             except (InternetTestError, ControllerError, GatewayError) as exc:
                 error = str(exc)
             except Exception:
@@ -970,7 +1014,7 @@ def service_progress_panel(pilot):
     if not pilot.service_running and not pilot.service_report and not pilot.service_error:
         return ''
     steps = getattr(pilot, 'service_steps', {})
-    report = pilot.service_report
+    report = pilot.current_service_report()
     if report and not pilot.service_running and not pilot.service_error:
         steps = {item['system']: item['status'] for item in report['checks']}
     total = len(steps) or len(SYSTEMS)
@@ -1043,8 +1087,8 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
     text += '<meta name="adr-site-timezone" content="'+esc(site_timezone_name())+'">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.1</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
-    report = pilot.service_report
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.2</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    report = pilot.current_service_report()
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
         notice = 'Last check completed · ' + display_time(report.get('completed_at'))
@@ -1063,8 +1107,10 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += form('outlet-cancel', 'Cancel') + '</section>'
     progress_markup = service_progress_panel(pilot)
     network_tools = ''
-    network_tools += '<details class="network-actions"' + (' open' if pilot.internet_test_running or pilot.internet_test or pilot.internet_test_error or pilot.controller_running or pilot.controller_result or pilot.controller_error else '') + '><summary>Network tools</summary><p class="tool-note">Speed tests use connection bandwidth.</p>'
-    network_tools += form('internet-speedtest', 'Run Internet Speed Test', disabled=pilot.service_running or pilot.internet_test_running or pilot.controller_running)
+    network_tools += '<details class="network-actions"' + (' open' if pilot.internet_test_running or pilot.internet_test or pilot.internet_test_error or pilot.controller_running or pilot.controller_result or pilot.controller_error else '') + '><summary>Network tools</summary><p class="tool-note">Speed tests run from the Green/service host to Cloudflare and use up to 267 MB per run. No UniFi gateway is required.</p>'
+    network_tools += form('internet-speedtest', 'Run Green Speed Test', disabled=pilot.service_running or pilot.internet_test_running or pilot.controller_running)
+    if pilot.araknis_options.get('unifi_gateway_host'):
+        network_tools += form('gateway-speedtest', 'Run UniFi Gateway Speed Test', disabled=pilot.service_running or pilot.internet_test_running or pilot.controller_running)
     if pilot.internet_test_running:
         network_tools += '<p role="status">Internet speed test in progress. Results will update automatically.</p>'
     if pilot.internet_test_error: network_tools += '<p>' + esc(pilot.internet_test_error) + '</p>'
@@ -1541,7 +1587,7 @@ class Handler(BaseHTTPRequestHandler):
         pilot = self.server.pilot
         if pilot.service_running or not pilot.service_report:
             raise ProtocolError('Complete Run All Checks before downloading its report.')
-        report = dict(pilot.service_report)
+        report = dict(pilot.current_service_report())
         report['usb_ups'] = pilot.usb_ups.status()
         body = json.dumps(report, indent=2, ensure_ascii=False).encode('utf-8')
         self.send_response(200)
@@ -1808,6 +1854,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_service_report()
                 elif action == 'internet-speedtest':
                     pilot.start_network_job('internet_test')
+                    self.send_page()
+                elif action == 'gateway-speedtest':
+                    pilot.start_network_job('internet_test', source='unifi_gateway')
                     self.send_page()
                 elif action == 'controller-confirm-online':
                     pilot.confirm_controller_online(params.get('confirm',[''])[0]=='yes')

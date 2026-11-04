@@ -1,3 +1,11 @@
+## 0.24.2 (development)
+
+- Run router-independent HTTPS throughput tests from Green, with a fixed Cloudflare endpoint, verified TLS, bounded payload and no retries or redirects.
+- Include Green ICMP latency/loss samples and host DNS resolution in system checks at every site, without controller credentials.
+- Keep Green and UniFi gateway tests available separately; scheduled speed tests use Green.
+- Preserve measurement timestamps and separate Green history; include fresh individual results in the dashboard, reports and Ask ADR.
+- Preserve unverified missing directions and remove throughput older than 24 hours from current readings.
+
 ## 0.24.1
 
 - Accept seconds/milliseconds in UniFi result timestamps and avoid rejecting new results from the same start second.

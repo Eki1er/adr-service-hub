@@ -32,6 +32,29 @@ def assess(name, snapshot):
     result = {'service_findings': [], 'data_limitations': [], 'observations': []}
     service, limits, notes = (result[k] for k in ('service_findings', 'data_limitations', 'observations'))
     usable = True
+    if name == 'Internet':
+        probes = snapshot.get('probes', [])
+        usable = len(probes) == 2 and all(p.get('sent') == 5 for p in probes)
+        notes.append('Internet checks measured from the Green/service host.')
+        for p in probes:
+            if p.get('loss_percent') is not None:
+                notes.append(str(p['name'])+': '+str(p['loss_percent'])+'% ICMP loss in five probes.')
+                if p['loss_percent'] > 0:
+                    service.append(str(p['name'])+': missed ICMP replies in this short sample; filtering or deprioritization remains possible.')
+        if snapshot.get('dns', {}).get('status') != 'resolved':
+            usable = False
+            limits.append('Host DNS resolution was not confirmed.')
+        speed = snapshot.get('speed_test')
+        if not speed:
+            limits.append('No Green speed test yet. Run Green Speed Test under Network tools.')
+        else:
+            notes.append('Speed readings retain their original measurement times, separately from current connectivity probes.')
+            limits.extend(speed.get('limitations', []))
+            if not speed.get('fresh_values_confirmed'):
+                limits.append('Both throughput directions were not confirmed; missing speeds remain unverified.')
+        limits.extend(snapshot.get('limitations', []))
+        result['status'] = 'unverified' if not usable else 'review' if service else 'verified'
+        return result
     if snapshot.get('network_health'):
         network=snapshot['network_health']
         notes.extend(network.get('observations',[]))
@@ -229,7 +252,7 @@ def compare(current, previous):
 
 
 def run_checks(jobs, baselines, progress=lambda *_: None, secrets=(), history=(), completed=lambda *_: None):
-    report = {'format': 'adr-service-report-v1', 'agent_version': '0.24.0', 'read_only': True,
+    report = {'format': 'adr-service-report-v1', 'agent_version': '0.24.2', 'read_only': True,
         'started_at': now(), 'completed_at': None, 'checks': [],
         'limitations': ['Verified means the specified read succeeded, not that every device function is healthy.',
             'Checks run sequentially; per-check timestamps differ. No automatic retries or device actions.',

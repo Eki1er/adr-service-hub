@@ -141,9 +141,10 @@ def history_chart(series):
 def network_panels(checks):
     uni = (checks.get('UniFi') or {}).get('snapshot') or {}
     ruckus = (checks.get('Ruckus') or {}).get('snapshot') or {}
-    internet = uni.get('internet_readings', [])
+    green = (checks.get('Internet') or {}).get('snapshot') or {}
+    internet = green.get('readings', []) if green else uni.get('internet_readings', [])
     issues = quality_issues(internet)
-    sensors = uni.get('sensors', []) + internet
+    sensors = internet if green else uni.get('sensors', []) + internet
     def metric(words, unit, speed=False):
         for sensor in sensors:
             label = str(sensor.get('name', '')).lower()
@@ -175,15 +176,35 @@ def network_panels(checks):
         for label, value in latency[:8]:
             output += '<div class="latency-bar-row"><span>' + esc(label) + '</span><div class="latency-bar-track"><span style="width:' + str(value / ceiling * 100) + '%"></span></div><strong>' + f'{value:g} ms' + '</strong></div>'
         output += '</div>'
+    if green:
+        from dashboard import display_time
+        output += '<p class="report-caption">Measured from Green · Probes '+esc(display_time(green.get('checked_at')))+'</p>'
+        for probe in green.get('probes', []):
+            loss=probe.get('loss_percent')
+            output += '<p>'+esc(probe['name'])+': '+(esc(loss)+'% ICMP loss in 5 probes' if loss is not None else 'probe unverified')+'</p>'
+        output += '<p>DNS: '+esc(green.get('dns',{}).get('status','unverified'))+'</p>'
+        speed=green.get('speed_test')
+        if speed:
+            output += '<p class="report-caption">Last Green throughput attempt '+esc(display_time(speed.get('completed_at')))+'</p>'
+            for note in speed.get('limitations',[]):
+                output += '<p class="report-caption">'+esc(note)+'</p>'
+        else:
+            output += '<p class="report-caption">Run Green Speed Test under Network tools. No router API key is needed.</p>'
+        output += '<details><summary>UniFi gateway measurements</summary>'
+        for reading in uni.get('internet_readings',[]):
+            output += '<p>'+esc(reading.get('name',''))+': '+esc(reading.get('state','Unverified'))+' '+esc(reading.get('unit',''))+'</p>'
     if uni.get('internet_error'):
         output += '<p class="measurement-warning">' + esc(uni['internet_error']) + '</p>'
     if uni.get('gateway_speedtest', {}).get('readings'):
-        output += '<p class="report-caption">UniFi gateway · Tested ' + esc(uni['gateway_speedtest']['readings'][0]['last_updated']) + '</p>'
+        from dashboard import display_time
+        output += '<p class="report-caption">UniFi gateway · Tested ' + esc(display_time(uni['gateway_speedtest']['readings'][0]['last_updated'])) + '</p>'
+    if green: output += '</details>'
     output += '<div class="network-history-grid">'
-    history = list(uni.get('network_history', []))
-    for name in ('UniFi speed test Download', 'UniFi speed test Upload'):
+    history = list((green or uni).get('network_history', []))
+    source = 'Green' if green else 'UniFi'
+    for name in (source+' speed test Download', source+' speed test Upload'):
         if not any(series.get('name')==name for series in history):
-            history.insert(0, {'name':name,'unit':'Mbit/s','points':[],'status':'Awaiting UniFi gateway results'})
+            history.insert(0, {'name':name,'unit':'Mbit/s','points':[],'status':'Awaiting '+source+' results'})
     for series in history[:8]:
         output += history_chart(series)
     output += '</div></section><h3 class="ap-heading">Access points</h3><div class="ap-grid">' 
@@ -210,3 +231,4 @@ def network_panels(checks):
         for ap in aps[:32]:
             output += '<div class="ap-card"><h4 title="' + esc(ap.get('name', 'Access point')) + '">' + esc(ap.get('name', 'Access point')) + '</h4><small>' + esc(ap.get('model', '')) + '</small><p>Status: <strong>Unverified</strong></p><p>Connected devices: <strong>Unverified</strong></p></div>'
     return output + '</div></div>'
+

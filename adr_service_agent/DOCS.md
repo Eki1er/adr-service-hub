@@ -1,3 +1,47 @@
+## Green Internet checks (0.24.2 development)
+
+The Internet check runs on the Green/service host with any router brand. No UniFi
+API key or gateway certificate approval is required for this check. Run All Checks
+collects five ICMP probes each to 1.1.1.1 and 8.8.8.8, plus a bounded example.com
+lookup through the host resolver. ICMP loss is a short sample, not proof of an ISP
+fault; blocked probes stay unverified. DNS answers may be cached.
+
+Under Network tools, Run Green Speed Test makes bounded HTTPS download/upload
+measurements against speed.cloudflare.com. It uses ordinary certificate validation,
+a fixed destination, no redirects, no automatic retries and no device commands.
+The implementation measures complete application payload transfers after warmup;
+it is not the browser Cloudflare measurement engine or Ookla Speedtest. Results
+can be limited by Green CPU, Ethernet, other traffic and the endpoint. They do not
+establish subscribed ISP speed, maximum line capacity or client Wi-Fi performance.
+The endpoint paths are documented in Cloudflare's measurement engine source:
+https://github.com/cloudflare/speedtest/tree/main/src/config
+
+A run transfers at most 181 MB down and 86 MB up (267 MB payload total). It stops
+increasing a direction's payload once a measured transfer takes two seconds.
+There is a shared 90-second time budget with a socket operation timeout up to ten
+seconds; routine connectivity probes can take a further 23 seconds. Failed or
+incomplete directions remain unverified; old successful values are not reused to
+fill a failed direction. A saved throughput result keeps its original timestamps
+and is removed from current readings after 24 hours. History remains separate
+from gateway measurements, with seven days of speeds and 24 hours of latency.
+
+Existing automatic_speedtests and speedtest_interval_minutes control scheduled
+Green tests (default six hours). Maximum payload at the default schedule is about
+1.07 GB per day. Automatic monitoring remains controlled by automatic_monitoring.
+Routine system checks do not trigger bandwidth tests. UI refreshes start neither.
+
+For sites configured with UniFi, Run UniFi Gateway Speed Test remains available.
+Its gateway API and saved certificate requirements are unchanged. Green results
+and UniFi results are labeled separately; a failed Green result does not silently
+fall back to a gateway result. Ask ADR and downloaded reports include Green probes,
+DNS, throughput quality and the original measurement times. All displayed times
+use the client's site_timezone.
+
+This development update has automated fixture tests but has not been built or
+measured on a live Green. Verify the container starts, both test buttons work,
+router-independent checks succeed without UniFi configuration, and the measurement
+limitations are clear before treating it as a field-tested diagnostic tool.
+
 # Network diagnostics — 0.24.0 development
 
 UniFi is the primary network adapter. It reuses the configured local gateway API

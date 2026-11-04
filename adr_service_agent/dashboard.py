@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dashboard_visuals import visuals, network_panels
 from network_health import summary as network_summary
 
-SYSTEMS = ('WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense')
+SYSTEMS = ('WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense', 'Internet')
 
 
 SITE_TIMEZONE = 'America/New_York'
@@ -59,6 +59,13 @@ def key_readings(name, snapshot):
             if name == 'CP4-R' and command in ('UPTIME', 'PROGUPTIME'):
                 m = re.search(r'has been running for ([^\r\n]+)', text)
                 if m: lines.append(('System' if command == 'UPTIME' else 'Program') + ' uptime: ' + m.group(1).strip())
+    elif name == 'Internet':
+        lines.append('Measured from Green')
+        for r in snapshot.get('readings', []):
+            lines.append(str(r['name'])+': '+str(r['state'])+' '+str(r['unit']))
+        for p in snapshot.get('probes', []):
+            lines.append(p['name']+': '+(str(p['loss_percent'])+'% ICMP loss in 5 probes' if p.get('loss_percent') is not None else 'probe unverified'))
+        lines.append('DNS: '+snapshot.get('dns',{}).get('status','unverified'))
     elif name == 'Sense':
         readings = snapshot.get('main_monitor_readings') or snapshot.get('readings', [])
         chosen = sorted(readings, key=lambda r: (0 if r.get('attributes', {}).get('device_class') == 'voltage' else 1 if any(t in (r.get('entity_id', '') + ' ' + r.get('name', '')).lower() for t in ('usage', 'consumption')) else 2, r.get('entity_id', '')))
@@ -111,6 +118,7 @@ def display_time(value):
 
 
 CATEGORIES = {
+    'Internet': ('IN', 'Measured from Green'),
     'WattBox': ('PW', 'Power management'), 'Sonos': ('SO', 'Audio'),
     'Bluesound': ('BL', 'Audio'), 'Ruckus': ('RU', 'Wireless'),
     'UniFi': ('UN', 'Network gateway'), 'Crestron': ('CR', 'Home automation'),
@@ -119,7 +127,7 @@ CATEGORIES = {
 }
 
 
-SYSTEM_ICONS = {'WattBox': 'power', 'Sense': 'energy', 'UniFi': 'network',
+SYSTEM_ICONS = {'Internet': 'network', 'WattBox': 'power', 'Sense': 'energy', 'UniFi': 'network',
     'Araknis': 'switch', 'Ruckus': 'wireless', 'Sonos': 'audio', 'Bluesound': 'audio',
     'Crestron': 'home', 'CP4-R': 'processor', 'Control4': 'home'}
 
@@ -196,7 +204,7 @@ def cards(report, names=SYSTEMS, outlet_controls=""):
 
 
 GROUPS = (('power', 'Power', ('WattBox', 'Sense')),
-    ('network', 'Network', ('UniFi', 'Araknis', 'Ruckus')),
+    ('network', 'Network', ('Internet', 'UniFi', 'Araknis', 'Ruckus')),
     ('av', 'AV/Automation', ('Sonos', 'Bluesound', 'Crestron', 'CP4-R', 'Control4')))
 
 

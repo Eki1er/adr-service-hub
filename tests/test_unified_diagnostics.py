@@ -229,7 +229,7 @@ class Unified(unittest.TestCase):
         self.path.write_text('{}');pilot=Pilot(self.root,self.path)
         self.assertFalse(pilot.diagnostics.error)
         self.assertFalse(pilot.diagnostics.status()['enabled'])
-        self.assertEqual(len(pilot.service_jobs()),10)
+        self.assertEqual(len(pilot.service_jobs()),11)
         with patch.object(hub,'check') as check:
             with self.assertRaises(diag.DiagnosticError):pilot.diagnostics.start('check',{})
             check.assert_not_called()

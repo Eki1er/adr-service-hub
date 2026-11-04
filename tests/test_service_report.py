@@ -117,7 +117,7 @@ class ServiceReportTests(unittest.TestCase):
             pilot.config = {'allow_reboot': True}
             (root / 'known_hosts').write_text('approved-test-key')
             jobs = pilot.service_jobs()
-            self.assertEqual([j[0] for j in jobs], ['WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense'])
+            self.assertEqual([j[0] for j in jobs], ['WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense', 'Internet'])
             report, _ = run_checks(jobs[:1], {})
             self.assertEqual(report['checks'][0]['status'], 'verified')
             self.assertEqual(box.resets, [])
@@ -143,6 +143,7 @@ class ServiceReportTests(unittest.TestCase):
             def ha(entry, field):
                 return {'entry': {'entry_id': entry, 'state': 'loaded'}, field: [{'state': 'off'}]}
             with ExitStack() as stack:
+                stack.enter_context(patch.object(pilot, 'collect_green_dashboard', return_value={'probes':[{'sent':5}, {'sent':5}], 'dns':{'status':'resolved'}}))
                 stack.enter_context(patch('agent.collect_sense', return_value={'entries': [{'state': 'loaded'}], 'readings': [{'state': '120', 'attributes': {'unit_of_measurement': 'V'}}]}))
                 stack.enter_context(patch('agent.collect_bluesound', return_value={'entries': [{'state': 'loaded'}], 'readings': [{'state': 'idle'}]}))
                 sonos = stack.enter_context(patch('agent.collect_sonos', return_value={'players': [{'state': 'idle'}]}))
@@ -156,7 +157,7 @@ class ServiceReportTests(unittest.TestCase):
                 araknis = stack.enter_context(patch('agent.discover_araknis', return_value=switch(100)))
                 cp4 = stack.enter_context(patch('agent.collect_cp4', return_value=processor('Monday')))
                 report, baselines = run_checks(pilot.service_jobs(), {})
-                self.assertEqual(report['counts'], {'verified': 10, 'review': 0, 'unverified': 0})
+                self.assertEqual(report['counts'], {'verified': 11, 'review': 0, 'unverified': 0})
                 sonos.assert_called_once_with()
                 ruckus.assert_called_once_with('ruckus-current')
                 unifi_read.assert_called_once_with('network', 'gateway')
@@ -186,7 +187,7 @@ class ServiceReportTests(unittest.TestCase):
                 ('ok', '172.30.32.2', True, 400)]:
             h = Handler.__new__(Handler)
             body = ('csrf=' + csrf).encode()
-            h.server = SimpleNamespace(pilot=SimpleNamespace(lock=threading.Lock(), csrf='ok', service_report=report, service_running=running, usb_ups=SimpleNamespace(status=lambda: {'enabled':True,'events':[]})))
+            h.server = SimpleNamespace(pilot=SimpleNamespace(lock=threading.Lock(), csrf='ok', service_report=report, current_service_report=lambda: report, service_running=running, usb_ups=SimpleNamespace(status=lambda: {'enabled':True,'events':[]})))
             h.client_address, h.path = (address, 123), '/service-report'
             h.headers = {'Content-Length': str(len(body)), 'Content-Type': 'application/x-www-form-urlencoded'}
             h.rfile, h.wfile = io.BytesIO(body), io.BytesIO()

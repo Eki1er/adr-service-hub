@@ -39,7 +39,7 @@ def evidence(report, options, power=None, native=None, individual=None, usb_ups=
             return date.timestamp() if date.tzinfo else None
         except (ValueError,TypeError):return None
     for name,snapshot in (individual or {}).items():
-        if name!='Araknis' or not isinstance(snapshot,dict):continue
+        if name not in ('Araknis','Internet') or not isinstance(snapshot,dict):continue
         fresh=epoch(snapshot.get('checked_at'))
         old=next((c for c in checks if c.get('system')==name),None)
         previous=epoch(old.get('completed_at')) if old else None
@@ -73,6 +73,13 @@ def evidence(report, options, power=None, native=None, individual=None, usb_ups=
             'comparisons':[display_text(str(v)[:250]) for v in item.get('comparisons',[])[:8]],
             'limitations':[display_text(str(v)[:250]) for v in item.get('data_limitations',[])[:4]]})
     out['network_health']=[]
+    green = next(((item.get('snapshot') or {}) for item in checks if item.get('system')=='Internet'), None)
+    if green:
+        out['green_network']={k:green.get(k) for k in ('source','checked_at','probes','dns')}
+        out['green_network']['readings']=green.get('readings',[])[:6]
+        speed=green.get('speed_test')
+        if isinstance(speed,dict):
+            out['green_network']['speed_test']={k:speed.get(k) for k in ('source','endpoint','started_at','completed_at','fresh_values_confirmed','limitations')}
     for item in checks:
         network=(item.get('snapshot') or {}).get('network_health')
         if not isinstance(network,dict):continue
