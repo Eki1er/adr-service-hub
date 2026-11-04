@@ -17,6 +17,7 @@ from service_report import run_checks, SkipCheck
 from diagnostic_hub import Hub as DiagnosticHub, panels as diagnostic_panels, evidence as diagnostic_evidence
 from network_diagnostics import DiagnosticError
 from native_events import NativeEvents, MAX_IMPORT
+from usb_ups import USBUPS
 from power_events import PowerJournal, identity as power_identity
 from monitoring import MonitoringSchedule
 from presentation import present_html
@@ -226,8 +227,9 @@ class Pilot:
         self.ups_running=False;self.ups_next_due=time.time()+60
         self.power_journal=PowerJournal(self.data/'power_events.json',self.ups_interval)
         self.native_events=NativeEvents(self.data/'native_events.json',self.araknis_options)
+        self.usb_ups=USBUPS(self.data/'usb_ups_events.json',self.araknis_options)
         self.diagnostics = DiagnosticHub(self.data, self.araknis_options,
-            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status(), self.native_events.status(), {'Araknis':self.araknis_diagnostics}))
+            lambda: diagnostic_evidence(self.service_report, self.araknis_options, self.power_status(), self.native_events.status(), {'Araknis':self.araknis_diagnostics}, usb_ups=self.usb_ups.status()))
         self.monitor = MonitoringSchedule(self.araknis_options, self.data / 'monitoring_state.json')
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
@@ -249,7 +251,7 @@ class Pilot:
             return self.monitor.tick(dispatch, busy=self.monitoring_busy())
 
     def start_monitoring(self):
-        if (not self.monitor.enabled and self.araknis_options.get('ups_monitoring_enabled') is not True) or self.monitor_active:
+        if (not self.monitor.enabled and not self.wattbox_ups_monitoring_enabled()) or self.monitor_active:
             return
         self.monitor_active = True
         def loop():
@@ -266,11 +268,14 @@ class Pilot:
             self.monitor_active = False
             raise
 
+    def wattbox_ups_monitoring_enabled(self):
+        return self.araknis_options.get('ups_monitoring_enabled') is True and not getattr(getattr(self, 'usb_ups', None), 'enabled', False)
+
     def power_target(self):
         return power_identity(self.araknis_options,self.data/'known_hosts')
 
     def power_status(self):
-        if self.araknis_options.get('ups_monitoring_enabled') is not True:
+        if not self.wattbox_ups_monitoring_enabled():
             return {'enabled':False,'status':'disabled','events':[],'current':None}
         try:return self.power_journal.status(self.power_target())
         except OSError:return {'enabled':True,'status':'unverified','events':[],'current':None,'error':'WattBox trust information could not be read.'}
@@ -286,13 +291,13 @@ class Pilot:
 
     def power_tick(self):
         with self.lock:
-            if self.araknis_options.get('ups_monitoring_enabled') is not True or time.time()<self.ups_next_due or self.monitoring_busy():return
+            if not self.wattbox_ups_monitoring_enabled() or time.time()<self.ups_next_due or self.monitoring_busy():return
             # Share the existing monitor loop; do not start a second scheduler.
             try:self.start_power_check()
             except ProtocolError:self.ups_next_due=time.time()+300
 
     def start_power_check(self):
-        if self.araknis_options.get('ups_monitoring_enabled') is not True:
+        if not self.wattbox_ups_monitoring_enabled():
             raise ProtocolError('Enable UPS monitoring in Configuration first.')
         if self.monitoring_busy():raise ProtocolError('Wait for the current check or power action to finish.')
         if self.config is None or not (self.data/'known_hosts').exists():
@@ -379,7 +384,7 @@ class Pilot:
             # Inventory only. Never call check(), create a confirmation, or reboot.
             with self.box() as box:
                 inventory=box.inventory()
-                if self.araknis_options.get('ups_monitoring_enabled') is True:
+                if self.wattbox_ups_monitoring_enabled():
                     try:inventory['power_monitor']=self.read_ups(box)
                     except ProtocolError:inventory['power_monitor']=self.power_status()
                 return inventory
@@ -1534,7 +1539,9 @@ class Handler(BaseHTTPRequestHandler):
         pilot = self.server.pilot
         if pilot.service_running or not pilot.service_report:
             raise ProtocolError('Complete Run All Checks before downloading its report.')
-        body = json.dumps(pilot.service_report, indent=2, ensure_ascii=False).encode('utf-8')
+        report = dict(pilot.service_report)
+        report['usb_ups'] = pilot.usb_ups.status()
+        body = json.dumps(report, indent=2, ensure_ascii=False).encode('utf-8')
         self.send_response(200)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Disposition', 'attachment; filename="ADR-Service-Report.json"')
@@ -1644,6 +1651,7 @@ class Handler(BaseHTTPRequestHandler):
             state=self.server.pilot.diagnostics.status()
             state['power_monitor']=self.server.pilot.power_status()
             state['native_events']=self.server.pilot.native_events.status()
+            state['usb_ups']=self.server.pilot.usb_ups.status()
             body = json.dumps(state).encode()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -1902,6 +1910,7 @@ def main():
     server = ThreadingHTTPServer(('0.0.0.0', 8099), Handler)
     server.pilot = Pilot('/data', '/data/options.json')
     server.pilot.native_events.start()
+    server.pilot.usb_ups.start()
     server.pilot.start_monitoring()
     print('ADR Service Agent 0.24.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
@@ -1909,6 +1918,7 @@ def main():
     finally:
         server.pilot.monitor_stop.set()
         server.pilot.native_events.close()
+        server.pilot.usb_ups.close()
         server.server_close()
 
 

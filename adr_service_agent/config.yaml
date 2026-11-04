@@ -19,6 +19,8 @@ homeassistant_api: true
 hassio_api: false
 host_network: false
 options:
+  nut_status_entity: ''
+  nut_ups_name: ''
   ups_monitoring_enabled: false
   ups_poll_interval_seconds: 15
   allow_outlet_control: false
@@ -64,6 +66,8 @@ options:
   native_events_enabled: false
   native_event_sources: []
 schema:
+  nut_status_entity: str?
+  nut_ups_name: str?
   ups_monitoring_enabled: bool?
   ups_poll_interval_seconds: int(5,300)?
   allow_outlet_control: bool?

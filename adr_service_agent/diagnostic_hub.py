@@ -29,9 +29,9 @@ def load(path):
         raise DiagnosticError('Saved diagnostics could not be read. Inspect app storage; no data was removed.') from None
 
 
-def evidence(report, options, power=None, native=None, individual=None):
+def evidence(report, options, power=None, native=None, individual=None, usb_ups=None):
     """Allowlist small health fields, never options, identifiers or raw consoles."""
-    if not report and not individual and not (power and power.get('enabled')) and not (native and native.get('enabled')): return {}
+    if not report and not individual and not (power and power.get('enabled')) and not (native and native.get('enabled')) and not (usb_ups and usb_ups.get('enabled')): return {}
     checks=list((report or {}).get('checks',[]))
     def epoch(value):
         try:
@@ -48,7 +48,7 @@ def evidence(report, options, power=None, native=None, individual=None):
             'evidence_source':'individual_diagnostic'}
         item.update(assess(name,snapshot))
         checks=[c for c in checks if c.get('system')!=name]+[item]
-    if not checks and not (power and power.get('enabled')) and not (native and native.get('enabled')):return {}
+    if not checks and not (power and power.get('enabled')) and not (native and native.get('enabled')) and not (usb_ups and usb_ups.get('enabled')):return {}
     merged=dict(report or {'format':'adr-service-report-v1','completed_at':None},checks=checks)
     out=import_report(merged)
     if power and power.get('enabled'):
@@ -58,6 +58,9 @@ def evidence(report, options, power=None, native=None, individual=None):
         out['native_events']={k:native.get(k) for k in ('listener_running','started_at','error','sources','rate_dropped','limitations')}
         out['native_events']['events']=[{k:v[:400] if k=='message' else v for k,v in e.items()} for e in native.get('events',[])[-12:]]
         out['native_events']['network_events']=[{k:v[:400] if k=='message' else v for k,v in e.items()} for e in native.get('network_events',[])[-16:]]
+    if usb_ups and usb_ups.get('enabled'):
+        out['usb_ups']={k:usb_ups.get(k) for k in ('status','listener_connected','current','latest','last_state','error','limitations')}
+        out['usb_ups']['events']=usb_ups.get('events',[])[-16:]
     out['summaries']=[]
     for item in checks[:20]:
         snapshot=item.get('snapshot') or {}

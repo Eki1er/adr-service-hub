@@ -699,3 +699,5 @@ Primary API references reviewed:
 Live gateway access, actual outlet switching and Ruckus status calibration require
 installation checks; they were not performed from the development environment.
 
+
+USB/NUT monitoring in the 0.24.0 draft adds persistent power transition evidence to Ask ADR. See `adr_service_agent/DOCS.md` for configuration and live acceptance requirements.

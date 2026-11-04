@@ -1,5 +1,9 @@
 ## 0.24.0 — development
 
+- Add read-only USB/NUT status and native notification subscriptions with persistent, bounded outage/restoration history for Ask ADR and report downloads.
+- Prefer configured USB monitoring over WattBox UPS polling while retaining outlet controls.
+- Separate baseline, monitoring-gap, communication and battery/line events; retain source and receipt times and suppress duplicate transition reports.
+
 - Add a shared network-evidence format with UniFi as the primary controller adapter.
 - Read UniFi device/port STP state, error and multicast/broadcast counters, and per-network IGMP snooping settings through fixed GET-only controller routes.
 - Compare target-scoped port states and counters without interpreting cumulative counts as loss rates or storms.
@@ -7,7 +11,7 @@
 - Add secondary Araknis help-gated STP, loop-protection, IGMP, MAC-count and LLDP display discovery.
 - Preserve unverified coverage for unsupported root/querier/membership fields and unconfirmed native event delivery.
 - Include the unpublished 0.23.1 cleanup. No port, root, VLAN, multicast or protection configuration changes.
-- Live UniFi key/firmware and Araknis display formats still require acceptance. USB/NUT compatibility has not been tested.
+- Live UniFi key/firmware and Araknis display formats still require acceptance. USB/NUT status readings were observed in the lab; native notification delivery and outage capture still require live acceptance.
 
 ## 0.23.1 — development
 

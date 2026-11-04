@@ -186,7 +186,7 @@ class ServiceReportTests(unittest.TestCase):
                 ('ok', '172.30.32.2', True, 400)]:
             h = Handler.__new__(Handler)
             body = ('csrf=' + csrf).encode()
-            h.server = SimpleNamespace(pilot=SimpleNamespace(lock=threading.Lock(), csrf='ok', service_report=report, service_running=running))
+            h.server = SimpleNamespace(pilot=SimpleNamespace(lock=threading.Lock(), csrf='ok', service_report=report, service_running=running, usb_ups=SimpleNamespace(status=lambda: {'enabled':True,'events':[]})))
             h.client_address, h.path = (address, 123), '/service-report'
             h.headers = {'Content-Length': str(len(body)), 'Content-Type': 'application/x-www-form-urlencoded'}
             h.rfile, h.wfile = io.BytesIO(body), io.BytesIO()
@@ -194,6 +194,7 @@ class ServiceReportTests(unittest.TestCase):
             h.do_POST()
             if expected == 200:
                 self.assertEqual(json.loads(h.wfile.getvalue())['format'], 'adr-service-report-v1')
+                self.assertTrue(json.loads(h.wfile.getvalue())['usb_ups']['enabled'])
                 h.send_header.assert_any_call('Content-Disposition', 'attachment; filename="ADR-Service-Report.json"')
             elif expected == 403:
                 self.assertEqual(h.send_error.call_args.args[0], 403)
@@ -228,3 +229,4 @@ class ServiceReportTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

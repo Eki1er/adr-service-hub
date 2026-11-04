@@ -887,3 +887,46 @@ Raw diagnostic reports and comparison baselines remain in memory and clear on
 restart; local historical annotations persist. Logs record annotation events
 without note text. No scheduled checks, device writes or new power actions are added.
 
+
+
+### USB UPS event monitoring (0.24.0 development)
+
+Configure the supporting Network UPS Tools app and its integration first. Confirm
+that the UPS supplies a raw status sensor (OL on line power; OB on battery).
+Then add both options to the ADR Service Agent configuration:
+
+```yaml
+nut_status_entity: sensor.my_ups_status_data
+nut_ups_name: myups
+```
+
+Use the exact raw Status data sensor ID and the device name configured in the NUT
+app. Leave both empty to disable this listener. No NUT password is copied into ADR.
+Save and restart ADR. The listener verifies the selected sensor belongs to the NUT
+integration, subscribes to that sensor and to matching `nut.ups_event` notifications,
+and sends no device actions. A startup sensor reading is a baseline, never an
+invented restoration. Communication failures and reconnects mark gaps rather than
+outages. Unknown/unavailable states do not establish power loss.
+
+When USB monitoring is configured, it takes priority over `ups_monitoring_enabled`:
+ADR stops its separate WattBox UPS polling. WattBox outlet inventory and confirmed
+outlet control continue unchanged. Existing WattBox power history remains on disk.
+If USB setup fails, ADR reports it as unverified; it does not silently fall back to
+a potentially conflicting power source.
+
+The separate USB journal retains up to 512 events for 30 days across app restarts.
+Ask ADR receives the latest 16 records; the report download includes the latest 50.
+The ingress diagnostic state includes listener status and history. Source-reported
+and receipt timestamps remain separate. An initial on-battery observation is not
+an exact outage start. Repeated native/sensor reports of the same transition do not
+create duplicate outage/restoration entries. Brief changes may still be missed if
+NUT notifications do not arrive, the integration does not update, or a connection
+is interrupted. No previous device history is recovered by installing the listener.
+A local event stream connection is not a fresh USB heartbeat.
+
+Acceptance: confirm listener connection, then verify a controlled battery/line
+transition at a suitable maintenance time against both the NUT status and saved ADR
+events. Do not use outlet-off or UPS-shutdown commands for this test. Native NUT
+notification delivery and actual outage capture remain unverified until this test.
+USB communication and status/voltage/load readings were observed in the lab via
+user-provided integration screenshots; other UPS models remain untested.
