@@ -97,6 +97,7 @@ schema:
   ruckus_controller_username: str?
   ruckus_controller_password: password?
   diagnostics_enabled: bool?
+  diagnostics_wattbox_https: bool?
   allowed_subnets:
   - str
   targets:

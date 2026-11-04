@@ -3,8 +3,8 @@ const source=fs.readFileSync('adr_service_agent/voice_ui.js','utf8');
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 function harness({secure=true,media=true,deferred=false}={}){
   const elements=new Map(),events={},calls=[],timers=[],recorders=[],tracks=[],spoken=[];
-  const ids=['adr-record','adr-record-cancel','adr-transcribe-file','adr-read-answer','adr-stop-reading',
-    'adr-voice-status','adr-question','diag-csrf','adr-audio-file',
+  const ids=['adr-record','adr-record-cancel','adr-read-answer','adr-stop-reading',
+    'adr-voice-status','adr-question','diag-csrf',
     'adr-transcript','adr-use-transcript'];
   for(const id of ids)elements.set(id,{id,value:'',textContent:'',checked:false,hidden:false,files:[],listeners:{},
     setAttribute(k,v){this[k]=v;},addEventListener(k,v){this.listeners[k]=v;}});
@@ -87,10 +87,5 @@ function harness({secure=true,media=true,deferred=false}={}){
     const h=harness();await h.click('adr-record');
     h.events.pagehide();await flush();assert.ok(h.tracks.length);assert.equal(h.calls.length,0);
   }
-  {
-    const h=harness({secure:false});
-    h.elements.get('adr-audio-file').files=[Object.assign(new Blob(['recording'],{type:'audio/mp4'}),{name:'question.m4a'})];
-    await h.click('adr-transcribe-file');assert.equal(h.calls.length,1);assert.equal(h.calls[0].url,'voice-transcribe');
-  }
-  console.log('Voice UI checks passed: consent, fallback, cancellation, late permission, transcript review, stale polls, typed edits, speech controls and page cleanup.');
+  console.log('Voice UI checks passed: consent, cancellation, late permission, transcript review, stale polls, typed edits, speech controls and page cleanup.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

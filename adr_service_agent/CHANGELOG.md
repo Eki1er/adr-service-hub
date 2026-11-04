@@ -1,5 +1,8 @@
 ## 0.23.1 — development
 
+- Stop HTTPS connectivity probes to the configured HTTP-only WattBox.
+- Remove recording-file upload controls; retain Speak and transcript review.
+
 - Give Ask ADR newer individual Araknis diagnostics with original timestamps.
 - Keep raw switch console text out of cloud analysis and retain the combined report.
 - Remove the dedicated power section from Ask ADR; keep relevant power evidence.

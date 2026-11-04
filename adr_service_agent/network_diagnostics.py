@@ -39,6 +39,10 @@ def config(raw):
         raise DiagnosticError('allowed_subnets: enter a private IPv4 network such as 192.168.50.0/24, with /24 or smaller scope.') from None
     c={'networks':networks}
     c['targets']=list(dict.fromkeys(address(t,c) for t in targets))
+    # The configured WattBox is HTTP-only unless explicitly opted into HTTPS.
+    wattbox=raw.get('wattbox_host','')
+    wattbox=wattbox.strip() if isinstance(wattbox,str) else ''
+    c['http_only_targets']=[wattbox] if wattbox in c['targets'] and raw.get('diagnostics_wattbox_https') is not True else []
     name=raw.get('dns_name','example.com')
     if isinstance(name,str):name=name.strip()
     if not isinstance(name,str) or len(name)>253 or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?',name):
@@ -116,7 +120,7 @@ def check(c, probe=ping, connect=tcp, resolve=dns, progress=lambda _:None):
             'DNS is tested through this app’s configured resolver; its cache can affect timing.']}
     for i,ip in enumerate(c['targets']):
         progress('Checking target '+str(i+1)+' of '+str(len(c['targets'])))
-        result['targets'].append({'ip':ip,'ping':probe(ip),'services':[connect(ip,80),connect(ip,443)]})
+        result['targets'].append({'ip':ip,'ping':probe(ip),'services':[connect(ip,port) for port in ((80,) if ip in c.get('http_only_targets',[]) else (80,443))]})
     progress('Checking DNS')
     result['dns']=resolve(c['dns_name'])
     return result

@@ -214,7 +214,7 @@ def panels(hub, csrf):
 <label for="adr-question">Question</label><textarea id="adr-question" maxlength="1000" placeholder="What needs attention?" rows="3"></textarea>
 <p class="report-caption">Ask ADR sends your question and collected readings to OpenAI.</p>
 <div class="toolbar"><button type="button" id="adr-record">Speak</button><button type="button" id="adr-record-cancel" hidden>Cancel</button><button type="button" data-diagnostic="ask">Ask ADR</button></div>
-<p class="report-caption">Speak or Transcribe sends your recording to OpenAI. API usage applies.</p>
-<div class="voice-file"><label for="adr-audio-file">Or choose a recording</label><input id="adr-audio-file" type="file" accept="audio/*,.m4a,.mp4,.webm,.wav,.mp3"><button type="button" id="adr-transcribe-file">Transcribe</button></div><p id="adr-transcript"></p><button type="button" id="adr-use-transcript" hidden>Use transcript</button><p id="adr-voice-status" role="status" aria-live="polite"></p></form>
+<p class="report-caption">Speak sends your recording to OpenAI. API usage applies.</p>
+<p id="adr-transcript"></p><button type="button" id="adr-use-transcript" hidden>Use transcript</button><p id="adr-voice-status" role="status" aria-live="polite"></p></form>
 <div class="toolbar voice-output"><button type="button" id="adr-read-answer">Read answer</button><button type="button" id="adr-stop-reading">Stop reading</button></div><p id="adr-analysis-progress" role="status"></p><div id="adr-answer" aria-live="polite"></div></section>'''
     return network,assistant

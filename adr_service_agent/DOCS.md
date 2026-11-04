@@ -151,10 +151,10 @@ https://help.snapone.com/ovrc-ug/Content/WB-OVRC/Power%20Insights.htm
   **0 disables that local daily cap**. Existing counters are retained, so a count
   of 10 no longer blocks after upgrading. Failed attempts still count. API
   billing/provider limits remain separate and no cloud call runs automatically.
-- Ask ADR, Speak and Transcribe require no extra page checkbox. Existing
+- Ask ADR and Speak require no extra page checkbox. Existing
   `cloud_analysis_enabled` and `voice_enabled` configuration gates remain.
   Clicking Ask ADR explicitly sends that question and collected readings;
-  Speak/Transcribe explicitly sends that recording after stop/upload. Microphone
+  Speak explicitly sends that recording after stopping. Microphone
   permission remains browser-controlled. The page retains a short disclosure.
 - The read-replies checkbox is removed. New answers to a question submitted in
   the current page are read aloud by default when the browser allows playback.
@@ -309,8 +309,7 @@ Microphone capture requires HTTPS, browser/app permission and permission from
 any containing frame. The Home Assistant app and Safari may behave differently;
 this must be tested on the actual phone. The app does not change parent-frame
 security settings. Keyboard dictation and typed questions remain available.
-Choose a recording and Transcribe offers an audio-file fallback when microphone
-capture is blocked. MP4/M4A, WebM, WAV and MP3 are supported, up to 2 MB.
+The recording-file picker is removed; use Speak or keyboard dictation.
 
 ## Privacy and behavior
 
@@ -319,8 +318,7 @@ capture is blocked. MP4/M4A, WebM, WAV and MP3 are supported, up to 2 MB.
 - Cancel discards an unsent recording. Leaving or hiding the page stops microphone
   tracks and speech. Once sent, an upload cannot be recalled from the provider.
 - Audio is held in memory only and is not written to app files or logs. A browser
-  recording is capped at 20 seconds; uploaded files are capped by byte size, not
-  independently decoded or duration-checked by the app.
+  recording is capped at 20 seconds and 2 MB.
 - One fixed HTTPS transcription request is sent with a 45-second connection
   timeout and bounded response. No automatic transcription retry. Daily voice
   attempts are limited to 10 per UTC day, separately from the 10 analysis attempts.
@@ -382,6 +380,9 @@ does not copy or delete it.
 ## Checks, cloud access and controls
 
 Local checks use fixed ICMP commands and TCP connects to ports 80 and 443 only.
+The configured WattBox target is checked on HTTP (80) only. Set the optional
+`diagnostics_wattbox_https: true` only if that WattBox supports HTTPS. Other
+targets retain both service checks.
 Discovery is manual, restricted to explicit local subnets and four workers.
 It never infers Wi-Fi association or treats a missing reply as an offline device.
 The image includes iputils-ping and requests NET_RAW only; host networking and

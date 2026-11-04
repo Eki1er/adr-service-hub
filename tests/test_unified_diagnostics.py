@@ -71,6 +71,14 @@ class Tools(unittest.TestCase):
         connection.send.assert_not_called();connection.recv.assert_not_called()
         with self.assertRaises(diag.DiagnosticError):diag.tcp('192.168.50.10',22,connector)
 
+    def test_http_only_wattbox_does_not_disable_https_for_other_targets(self):
+        raw=dict(self.options(),wattbox_host='192.168.50.10',targets=['192.168.50.10','192.168.50.11'])
+        connect=Mock(return_value={'status':'reachable'})
+        diag.check(diag.config(raw),probe=Mock(return_value={}),connect=connect,resolve=Mock(return_value={}))
+        self.assertEqual([call.args for call in connect.call_args_list],
+            [('192.168.50.10',80),('192.168.50.11',80),('192.168.50.11',443)])
+        self.assertEqual(diag.config(dict(raw,diagnostics_wattbox_https=True))['http_only_targets'],[])
+
     def test_dns_bounded_child_and_failures(self):
         runner=Mock(return_value=SimpleNamespace(stdout='["192.0.2.1"]',returncode=0))
         self.assertEqual(diag.dns('example.com',runner)['status'],'resolved')

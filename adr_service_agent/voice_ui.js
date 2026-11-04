@@ -11,7 +11,6 @@
     $('adr-record').textContent=active?.phase==='recording'?'Stop recording':'Speak';
     $('adr-record').setAttribute('aria-pressed',String(active?.phase==='recording'));
     $('adr-record-cancel').hidden=!active||!['requesting','recording'].includes(active.phase);
-    $('adr-transcribe-file').disabled=!voiceAllowed()||busy();
     $('adr-read-answer').disabled=!state.answer||!window.speechSynthesis;
     $('adr-stop-reading').disabled=!utterance;
   }
@@ -134,15 +133,6 @@
   window.ADRVoice={busy,update,expectAnswer:()=>{stopReading();expectedAnswer={key:state.answer_id||state.answer||'',started:Date.now()};}};
   $('adr-record').addEventListener('click',record);
   $('adr-record-cancel').addEventListener('click',()=>discard());
-  $('adr-transcribe-file').addEventListener('click',async()=>{
-    if(busy())return;
-    try{
-      consent();stopReading();const file=$('adr-audio-file').files[0];
-      if(!file)throw new Error('Choose a recording first.');
-      await upload(file,formatType(file.type,file.name),$('adr-question').value);
-      $('adr-audio-file').value='';
-    }catch(error){message(error.name==='AbortError'?'Upload timed out. Check status before trying again.':error.message);controls();}
-  });
   $('adr-use-transcript').addEventListener('click',()=>{if(draft)$('adr-question').value=draft;draft='';$('adr-transcript').textContent='';$('adr-use-transcript').hidden=true;message('Review your question, then tap Ask ADR.');});
   $('adr-read-answer').addEventListener('click',speak);
   $('adr-stop-reading').addEventListener('click',stopReading);
