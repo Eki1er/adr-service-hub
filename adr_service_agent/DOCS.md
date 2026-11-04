@@ -1,4 +1,4 @@
-## Ookla SpeedTest add-on provider (0.24.3 development)
+## Ookla SpeedTest add-on provider (0.24.3)
 
 Install https://github.com/MrSuicideParrot/hassio-speedtest-addon separately and
 accept its license/privacy options yourself if you agree. Test it once and verify

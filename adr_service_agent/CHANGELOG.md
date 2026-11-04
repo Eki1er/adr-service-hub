@@ -1,4 +1,4 @@
-## 0.24.3 (development)
+## 0.24.3
 
 - Add an explicit Ookla SpeedTest add-on provider for Green, independent of UniFi gateway tests.
 - Read only the add-on's fixed download/upload/ping sensors and require matching server IDs, transfer-byte metadata, finite values and recent aligned timestamps.
