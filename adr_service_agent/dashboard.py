@@ -10,6 +10,24 @@ from network_health import summary as network_summary
 SYSTEMS = ('WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense')
 
 
+SITE_TIMEZONE = 'America/New_York'
+
+
+def configure_site_timezone(options):
+    global SITE_TIMEZONE
+    value=options.get('site_timezone','America/New_York')
+    try:
+        if not isinstance(value,str) or len(value)>80:raise ValueError()
+        ZoneInfo(value)
+        SITE_TIMEZONE=value
+    except (ValueError,KeyError):
+        SITE_TIMEZONE=None
+
+
+def site_timezone_name():
+    return SITE_TIMEZONE or 'invalid'
+
+
 def key_readings(name, snapshot):
     if not snapshot:
         return []
@@ -74,17 +92,19 @@ def key_readings(name, snapshot):
 
 
 def display_time(value):
-    """Compact Eastern time for the dashboard; raw report timestamps stay intact."""
+    """Site-local time for the dashboard; raw report timestamps stay intact."""
     if not value:
         return 'Time unreported'
+    if SITE_TIMEZONE is None:
+        return 'Configure site timezone'
     try:
         stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
         if stamp.tzinfo is None:
             return str(value)
         try:
-            stamp = stamp.astimezone(ZoneInfo('America/New_York'))
+            stamp = stamp.astimezone(ZoneInfo(SITE_TIMEZONE))
         except ZoneInfoNotFoundError:
-            pass
+            return 'Configure site timezone'
         return stamp.strftime('%b %d · %I:%M %p %Z').replace(' 0', ' ')
     except (ValueError, TypeError):
         return str(value)

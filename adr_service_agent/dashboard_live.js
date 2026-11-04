@@ -136,7 +136,8 @@
     for(const row of rows){const tr=document.createElement('tr');for(const value of row){const td=document.createElement('td');td.textContent=String(value??'Unverified');tr.append(td);}fragment.append(tr);}
     body.replaceChildren(fragment);body.dataset.rows=serialized;
   }
-  const localDate=value=>{const d=new Date(value);return value&&!Number.isNaN(d.valueOf())?new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'}).format(d):'Unverified';};
+  const siteTimezone=document.querySelector('meta[name="adr-site-timezone"]')?.content||'America/New_York';
+  const localDate=value=>{const d=new Date(value);if(!value||Number.isNaN(d.valueOf()))return 'Unverified';try{return new Intl.DateTimeFormat('en-US',{timeZone:siteTimezone,year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(d);}catch{return 'Configure site timezone';}};
   function renderNative(native){
     const status=diag('adr-native-status'),panel=diag('adr-native-history'),sources=diag('adr-native-sources'),list=diag('adr-native-list'),select=diag('adr-native-source');
     if(!status||!panel||!sources||!list||!select)return;

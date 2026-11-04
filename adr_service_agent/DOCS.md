@@ -930,3 +930,15 @@ events. Do not use outlet-off or UPS-shutdown commands for this test. Native NUT
 notification delivery and actual outage capture remain unverified until this test.
 USB communication and status/voltage/load readings were observed in the lab via
 user-provided integration screenshots; other UPS models remain untested.
+
+
+### Client site timezone
+
+Set `site_timezone` to the installed system's IANA timezone, for example
+`America/New_York`, `America/Chicago` or `America/Los_Angeles`. Existing sites default
+to America/New_York for compatibility. Save and restart ADR after changing it.
+Dashboard timestamps, browser event history and Ask ADR use this site setting,
+independently of the technician's phone/browser or the server timezone. Daylight
+saving and local date rollover are automatic. Invalid zone names require a
+configuration correction; timestamps without a known timezone are not guessed.
+Original journal/report timestamps remain intact for correlation and export.

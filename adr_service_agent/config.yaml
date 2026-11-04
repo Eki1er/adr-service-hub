@@ -1,5 +1,5 @@
 name: ADR Service Agent
-version: 0.24.0
+version: 0.24.1
 slug: adr_service_agent
 description: Unified monitoring, network diagnostics, Ask ADR, and confirmed outlet
   controls.
@@ -19,6 +19,7 @@ homeassistant_api: true
 hassio_api: false
 host_network: false
 options:
+  site_timezone: America/New_York
   nut_status_entity: ''
   nut_ups_name: ''
   ups_monitoring_enabled: false
@@ -66,6 +67,7 @@ options:
   native_events_enabled: false
   native_event_sources: []
 schema:
+  site_timezone: str?
   nut_status_entity: str?
   nut_ups_name: str?
   ups_monitoring_enabled: bool?

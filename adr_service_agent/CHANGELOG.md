@@ -1,3 +1,9 @@
+## 0.24.1 — development
+
+- Use the configured client site timezone in dashboard, browser event history and Ask ADR.
+- Convert timestamp copies before analysis, preserving local dates and daylight-saving abbreviations; retain original journal timestamps.
+- Explain that an unchanged sensor timestamp alone does not establish stopped monitoring.
+
 ## 0.24.0
 
 - Add read-only USB/NUT status and native notification subscriptions with persistent, bounded outage/restoration history for Ask ADR and report downloads.
