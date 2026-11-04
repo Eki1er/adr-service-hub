@@ -24,6 +24,7 @@ from presentation import present_html
 from ui_icons import icon
 from internet_test import InternetTestError
 from green_network import collect as collect_green_network, run as run_green_test
+from ookla_addon import read as read_ookla_addon, run as run_ookla_addon
 from unifi_gateway import collect as collect_gateway, run as run_gateway_test, settings as gateway_settings, target as gateway_target, GatewayError
 from network_history import append as append_network_history
 from outlet_control import prepare as prepare_outlet, execute as execute_outlet
@@ -335,8 +336,13 @@ class Pilot:
             raise ProtocolError('UPS check could not start.') from None
 
     def collect_green_dashboard(self):
+        if self.araknis_options.get('green_speedtest_provider') == 'ookla_addon':
+            self.green_speed = read_ookla_addon()
+        elif (self.green_speed or {}).get('provider') == 'ookla_addon':
+            self.green_speed = None
         snapshot = collect_green_network(self.green_speed)
-        snapshot['network_history'] = append_network_history(self.green_history, 'green', snapshot['readings'])
+        identity = 'green:'+str((self.green_speed or {}).get('provider','cloudflare'))+':'+str((self.green_speed or {}).get('server_id',''))
+        snapshot['network_history'] = append_network_history(self.green_history, identity, snapshot['readings'])
         atomic_json(self.data / 'green_network_history.json', self.green_history)
         self.green_snapshot = snapshot
         return snapshot
@@ -597,7 +603,15 @@ class Pilot:
         def job():
             result, error = None, None
             try:
-                result = (run_green_test() if source == 'green' else run_gateway_test(self.araknis_options, self.gateway_pin)) if kind == 'internet_test' else collect_controller(config, self.controller_pin)
+                if kind == 'internet_test':
+                    if source != 'green':
+                        result = run_gateway_test(self.araknis_options, self.gateway_pin)
+                    elif self.araknis_options.get('green_speedtest_provider') == 'ookla_addon':
+                        result = run_ookla_addon()
+                    else:
+                        result = run_green_test()
+                else:
+                    result = collect_controller(config, self.controller_pin)
                 if kind == 'internet_test' and source == 'green':
                     self.green_speed = result
                     atomic_json(self.data / 'green_speed_test.json', result)
@@ -1087,7 +1101,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
     text += '<meta name="adr-site-timezone" content="'+esc(site_timezone_name())+'">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.2</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr">Ask ADR</a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="mobile-tools"><a href="#history" aria-label="History">{icon("history")}</a><a href="#connections" aria-label="Connections">{icon("settings")}</a></div><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.3</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.current_service_report()
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1107,8 +1121,9 @@ def page(pilot, confirmation=None, candidate=None, error=None):
         text += form('outlet-cancel', 'Cancel') + '</section>'
     progress_markup = service_progress_panel(pilot)
     network_tools = ''
-    network_tools += '<details class="network-actions"' + (' open' if pilot.internet_test_running or pilot.internet_test or pilot.internet_test_error or pilot.controller_running or pilot.controller_result or pilot.controller_error else '') + '><summary>Network tools</summary><p class="tool-note">Speed tests run from the Green/service host to Cloudflare and use up to 267 MB per run. No UniFi gateway is required.</p>'
-    network_tools += form('internet-speedtest', 'Run Green Speed Test', disabled=pilot.service_running or pilot.internet_test_running or pilot.controller_running)
+    ookla_selected = pilot.araknis_options.get('green_speedtest_provider') == 'ookla_addon'
+    network_tools += '<details class="network-actions"' + (' open' if pilot.internet_test_running or pilot.internet_test or pilot.internet_test_error or pilot.controller_running or pilot.controller_result or pilot.controller_error else '') + '><summary>Network tools</summary><p class="tool-note">' + ('Green tests use the installed Ookla SpeedTest add-on. Disable polling on the original Speedtest.net integration. Speed tests use connection bandwidth.' if ookla_selected else 'Speed tests run from the Green/service host to Cloudflare and use up to 267 MB per run.') + ' No UniFi gateway is required.</p>'
+    network_tools += form('internet-speedtest', 'Run Ookla Speed Test' if ookla_selected else 'Run Green Speed Test', disabled=pilot.service_running or pilot.internet_test_running or pilot.controller_running)
     if pilot.araknis_options.get('unifi_gateway_host'):
         network_tools += form('gateway-speedtest', 'Run UniFi Gateway Speed Test', disabled=pilot.service_running or pilot.internet_test_running or pilot.controller_running)
     if pilot.internet_test_running:

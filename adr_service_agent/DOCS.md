@@ -1,3 +1,46 @@
+## Ookla SpeedTest add-on provider (0.24.3 development)
+
+Install https://github.com/MrSuicideParrot/hassio-speedtest-addon separately and
+accept its license/privacy options yourself if you agree. Test it once and verify
+that sensor.speedtest_download, sensor.speedtest_upload and sensor.speedtest_ping
+match the log. The add-on posts server_id/server_name and bytes_received/bytes_sent
+attributes; ADR requires that signature, matching server IDs, timestamps within
+15 seconds of each other and no older than 24 hours. This is source-shape validation,
+not cryptographic attestation. The current add-on version writes these exact sensor
+IDs; renamed entities are not auto-selected.
+
+On the original Speedtest.net integration entry, open the three-dot menu > System
+options, turn off Enable polling for changes, and save. Keep that integration and
+its three sensors. Disable any separate speed-test automations during validation.
+In the SpeedTest add-on leave start on boot and watchdog off: it exits after each
+test, and ADR controls the schedule. ADR does not change those settings for you.
+
+In ADR Configuration choose green_speedtest_provider: ookla_addon, save and restart
+ADR. Run All Checks reads the existing Ookla sensor results without starting a test.
+Run Ookla Speed Test and scheduled speed tests send one fixed Core service request:
+POST /api/services/hassio/addon_start, addon 6b87c29e_speedtest_addon. ADR retains
+hassio_api: false: it calls only this Core service, not the Supervisor management
+API. Actual Core authorization and the installed app identity require live testing.
+The add-on must be the repository above; no arbitrary app slug is accepted.
+
+ADR then polls the three states for up to 150 seconds. All must have new timestamps
+at or after the request, be newer than the prior result, and pass source-shape checks.
+A start timeout is ambiguous and is never retried; inspect the add-on log. A sensor
+read never invokes update_entity or starts the built-in Python test. No fallback to
+Cloudflare or gateway measurements happens when Ookla values are unverified.
+
+Green probe/DNS checks and UniFi gateway tests remain separate. Green history is
+isolated by speed-test provider and server, avoiding comparisons across server
+changes. Cloudflare remains selectable explicitly. No official Ookla binary is
+bundled or redistributed by ADR; acceptance and commercial usage rights remain
+subject to Ookla's terms. Client rollout licensing remains unverified.
+
+Source inspected: speedtest/rootfs/etc/services.d/speedtest/run in the add-on
+repository, and homeassistant/components/hassio/services.yaml in Home Assistant
+Core. Automated fixture tests cover source checks, failed/mixed/stale values,
+start semantics, deadline/freshness and provider routing. The ADR-to-add-on start
+has not been tested on the live Green yet.
+
 ## Green Internet checks (0.24.2)
 
 The Internet check runs on the Green/service host with any router brand. No UniFi

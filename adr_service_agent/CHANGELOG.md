@@ -1,3 +1,11 @@
+## 0.24.3 (development)
+
+- Add an explicit Ookla SpeedTest add-on provider for Green, independent of UniFi gateway tests.
+- Read only the add-on's fixed download/upload/ping sensors and require matching server IDs, transfer-byte metadata, finite values and recent aligned timestamps.
+- Start only the known installed SpeedTest add-on through the Core service; never trigger the original Python integration, accept licenses, restart an app or retry an ambiguous start.
+- Require three new results after a test request; retain original measurement times and isolate history by provider/server.
+- Preserve Cloudflare as an explicit provider option, without automatic fallback from failed Ookla results.
+
 ## 0.24.2
 
 - Run router-independent HTTPS throughput tests from Green, with a fixed Cloudflare endpoint, verified TLS, bounded payload and no retries or redirects.

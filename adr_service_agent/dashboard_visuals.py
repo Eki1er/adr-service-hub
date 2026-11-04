@@ -201,7 +201,7 @@ def network_panels(checks):
     if green: output += '</details>'
     output += '<div class="network-history-grid">'
     history = list((green or uni).get('network_history', []))
-    source = 'Green' if green else 'UniFi'
+    source = ('Green Ookla' if (green.get('speed_test') or {}).get('provider')=='ookla_addon' else 'Green') if green else 'UniFi'
     for name in (source+' speed test Download', source+' speed test Upload'):
         if not any(series.get('name')==name for series in history):
             history.insert(0, {'name':name,'unit':'Mbit/s','points':[],'status':'Awaiting '+source+' results'})

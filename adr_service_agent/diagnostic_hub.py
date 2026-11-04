@@ -79,7 +79,7 @@ def evidence(report, options, power=None, native=None, individual=None, usb_ups=
         out['green_network']['readings']=green.get('readings',[])[:6]
         speed=green.get('speed_test')
         if isinstance(speed,dict):
-            out['green_network']['speed_test']={k:speed.get(k) for k in ('source','endpoint','started_at','completed_at','fresh_values_confirmed','limitations')}
+            out['green_network']['speed_test']={k:speed.get(k) for k in ('source','provider','server_id','endpoint','started_at','completed_at','fresh_values_confirmed','limitations')}
     for item in checks:
         network=(item.get('snapshot') or {}).get('network_health')
         if not isinstance(network,dict):continue
