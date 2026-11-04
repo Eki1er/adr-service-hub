@@ -1,4 +1,4 @@
-## 0.24.2 (development)
+## 0.24.2
 
 - Run router-independent HTTPS throughput tests from Green, with a fixed Cloudflare endpoint, verified TLS, bounded payload and no retries or redirects.
 - Include Green ICMP latency/loss samples and host DNS resolution in system checks at every site, without controller credentials.

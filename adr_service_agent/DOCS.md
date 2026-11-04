@@ -1,4 +1,4 @@
-## Green Internet checks (0.24.2 development)
+## Green Internet checks (0.24.2)
 
 The Internet check runs on the Green/service host with any router brand. No UniFi
 API key or gateway certificate approval is required for this check. Run All Checks
@@ -37,7 +37,7 @@ fall back to a gateway result. Ask ADR and downloaded reports include Green prob
 DNS, throughput quality and the original measurement times. All displayed times
 use the client's site_timezone.
 
-This development update has automated fixture tests but has not been built or
+This update has automated fixture tests but has not been built or
 measured on a live Green. Verify the container starts, both test buttons work,
 router-independent checks succeed without UniFi configuration, and the measurement
 limitations are clear before treating it as a field-tested diagnostic tool.
