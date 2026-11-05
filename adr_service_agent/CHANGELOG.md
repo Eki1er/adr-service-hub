@@ -1,3 +1,8 @@
+## 0.25.1
+
+- Remove the empty UniFi gateway measurements dropdown from the Green Internet tile. Gateway readings and history remain in the UniFi tile.
+- An active Network Monitoring trial ends on app restart; wait until the trial completes before installing this update.
+
 ## 0.25.0
 
 - Add Network → Network Monitoring with Start/Stop for an opt-in 24-hour ICMP trial.

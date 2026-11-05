@@ -1,4 +1,10 @@
-## Current release: 0.25.0
+## Current release: 0.25.1
+
+Removes the empty UniFi gateway measurements dropdown from the Green Internet tile.
+Gateway measurements remain in the separate UniFi tile. Installing this update
+restarts the app; let an active 24-hour trial finish before updating.
+
+## Previous release: 0.25.0
 
 Adds an opt-in **Network → Network Monitoring** item for a 24-hour latency and
 packet-loss trial, using the configured gateway IP plus Cloudflare and Google.
