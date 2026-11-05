@@ -289,15 +289,13 @@ def network_panels(checks, include_internet=True, include_access_points=True):
                 output += '<p class="report-caption">'+esc(note)+'</p>'
         else:
             output += '<p class="report-caption">Run Green Speed Test under Network tools. No router API key is needed.</p>'
-        output += '<details><summary>UniFi gateway measurements</summary>'
-        for reading in uni.get('internet_readings',[]):
-            output += '<p>'+esc(reading.get('name',''))+': '+esc(reading.get('state','Unverified'))+' '+esc(reading.get('unit',''))+'</p>'
-    if uni.get('internet_error'):
+    # Green and gateway readings have their own tiles. A Green-only snapshot
+    # cannot populate a gateway disclosure, so do not render an empty control.
+    if not green and uni.get('internet_error'):
         output += '<p class="measurement-warning">' + esc(uni['internet_error']) + '</p>'
-    if uni.get('gateway_speedtest', {}).get('readings'):
+    if not green and uni.get('gateway_speedtest', {}).get('readings'):
         from dashboard import display_time
         output += '<p class="report-caption">UniFi gateway · Tested ' + esc(display_time(uni['gateway_speedtest']['readings'][0]['last_updated'])) + '</p>'
-    if green: output += '</details>'
     output += '<div class="network-history-grid">'
     history = list((green or uni).get('network_history', []))
     source = ('Green Ookla' if (green.get('speed_test') or {}).get('provider')=='ookla_addon' else 'Green') if green else 'UniFi'
@@ -332,4 +330,5 @@ def network_panels(checks, include_internet=True, include_access_points=True):
         for ap in aps[:32]:
             output += '<div class="ap-card"><h4 title="' + esc(ap.get('name', 'Access point')) + '">' + esc(ap.get('name', 'Access point')) + '</h4><small>' + esc(ap.get('model', '')) + '</small><p>Status: <strong>Unverified</strong></p><p>Connected devices: <strong>Unverified</strong></p></div>'
     return output + '</div></div>'
+
 

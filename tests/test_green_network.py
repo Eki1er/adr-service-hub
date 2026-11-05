@@ -94,8 +94,11 @@ class GreenTests(unittest.TestCase):
         uni={'internet_readings':[{'name':'UniFi speed test Download','state':940,'unit':'Mbit/s'}]}
         rendered=network_panels({'Internet':{'snapshot':snapshot},'UniFi':{'snapshot':uni}})
         self.assertIn('650 Mbit/s',rendered)
-        self.assertIn('UniFi gateway measurements',rendered)
-        self.assertIn('940 Mbit/s',rendered)
+        self.assertNotIn('UniFi gateway measurements',rendered)
+        self.assertNotIn('940 Mbit/s',rendered)
+        gateway_rendered=network_panels({'UniFi':{'snapshot':uni}})
+        self.assertIn('940 Mbit/s',gateway_rendered)
+        self.assertNotIn('650 Mbit/s',gateway_rendered)
         self.assertIn('Measured from Green',rendered)
         self.assertIn('DNS: resolved',rendered)
 
@@ -131,3 +134,4 @@ class GreenTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
