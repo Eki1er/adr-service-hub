@@ -10,7 +10,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from network_diagnostics import DiagnosticError, config, check, discover, retain, save, summary, import_report
+from network_diagnostics import DiagnosticError, config, check, discover, retain, save, summary, import_report, tcp
 from diagnostic_analysis import ask
 from voice_input import transcribe, validate as validate_audio
 from presentation import display_text
@@ -105,11 +105,13 @@ def daily_limit(options,key):
 
 
 class Hub:
-    def __init__(self, data, options, report_provider):
+    def __init__(self, data, options, report_provider, identity_provider=None):
+        self.identity_provider=identity_provider
         self.data=Path(data)/'diagnostics'; self.options=options;self.report_provider=report_provider
         self.lock=threading.Lock();self.busy=False;self.progress='Ready';self.answer='';self.last_started=0;self.answer_id=''
         self.transcript='';self.transcript_id='';self.voice_quota={};self.last_voice_started=0
         self.error='';self.settings={'networks':[],'targets':[]};self.history={};self.quota={};self.result={}
+        self.discovery={};self.discovery_subnet='';self.discovery_last_attempt=0;self.discovery_ready_at=time.time()+60
         try:
             self.data.mkdir(parents=True,exist_ok=True)
             self.settings=config(options)
@@ -117,6 +119,12 @@ class Hub:
             self.quota=load(self.data/'analysis_attempts.json')
             self.voice_quota=load(self.data/'voice_attempts.json')
             self.result=(self.history.get('samples') or [{}])[-1].get('result',{})
+            self.discovery=next((s['result'] for s in reversed(self.history.get('samples',[])) if s.get('result',{}).get('kind')=='discovery'),{})
+            schedule=load(self.data/'discovery_schedule.json')
+            candidate=schedule.get('subnet',self.discovery.get('subnet',''))
+            if candidate in [str(n) for n in self.settings['networks']]:self.discovery_subnet=candidate
+            attempt=schedule.get('last_attempt',0)
+            if type(attempt) in (int,float) and 0<=attempt<=time.time()+60:self.discovery_last_attempt=attempt
         except DiagnosticError as exc:self.error=str(exc)
         except Exception:self.error='Diagnostic storage or configuration needs attention. No data was removed.'
 
@@ -126,6 +134,7 @@ class Hub:
                 'transcript':self.transcript,'transcript_id':self.transcript_id,
                 'voice_enabled':self.options.get('voice_enabled') is True,
                 'answer':self.answer,'answer_id':self.answer_id,'result':self.result,'observed':self.history.get('observed',[]),
+                'discovery':self.discovery,'discovery_subnet':self.discovery_subnet,
                 'summary':summary(self.result) if self.result else 'No local checks yet.',
                 'enabled':self.options.get('diagnostics_enabled') is True,
                 'cloud_enabled':self.options.get('cloud_analysis_enabled') is True}
@@ -179,6 +188,14 @@ class Hub:
         self.record(result)
         return result
 
+    def discovery_tick(self):
+        # Pilot serializes this with other operations. No new subnet is inferred.
+        if (self.error or self.busy or self.options.get('automatic_monitoring',True) is not True
+                or self.options.get('diagnostics_enabled') is not True or not self.discovery_subnet
+                or time.time()<max(self.discovery_ready_at,self.discovery_last_attempt+1200)
+                or time.time()-self.last_started<10):return
+        self.start('discover',{'subnet':self.discovery_subnet})
+
     def start(self,action,fields,thread_factory=threading.Thread):
         with self.lock:
             if self.error:raise DiagnosticError(self.error)
@@ -190,6 +207,10 @@ class Hub:
             if action=='check' and not self.settings['targets']:raise DiagnosticError('Configure target addresses first.')
             if action=='discover' and fields.get('subnet') not in [str(n) for n in self.settings['networks']]:
                 raise DiagnosticError('Choose a configured subnet.')
+            if action=='discover':
+                attempted=time.time()
+                save(self.data/'discovery_schedule.json',{'subnet':fields['subnet'],'last_attempt':attempted})
+                self.discovery_subnet=fields['subnet'];self.discovery_last_attempt=attempted
             if action=='ask':
                 if self.options.get('cloud_analysis_enabled') is not True or fields.get('confirm')!='yes':
                     raise DiagnosticError('Enable cloud analysis and confirm sending readings.')
@@ -198,7 +219,11 @@ class Hub:
                 service=self.report_provider()
                 if not service and not self.result:raise DiagnosticError('Run checks first.')
                 previous=[s['result'] for s in self.history.get('samples',[])[:-1] if s.get('result',{}).get('kind')=='target_checks']
-                collected={'latest_checks':self.result,'previous_checks':previous[-1:],'service_report':service}
+                latest=self.result
+                if latest.get('kind')=='discovery':
+                    latest=dict(latest,devices=latest.get('devices',[])[:16],responding=latest.get('responding',[])[:64],
+                        discovered_count=len(latest.get('responding',[])),identity_rows_omitted=max(0,len(latest.get('devices',[]))-16))
+                collected={'latest_checks':latest,'previous_checks':previous[-1:],'service_report':service}
                 # Fail before charging the local attempt quota if evidence is too large.
                 if len(json.dumps(collected,allow_nan=False).encode())>40000:
                     raise DiagnosticError('Readings exceed the analysis limit. Run a focused local check first.')
@@ -218,8 +243,10 @@ class Hub:
                     answer=ask(self.options,fields['question'],collected,True)
                     with self.lock:self.answer=display_text(answer);self.answer_id=secrets.token_urlsafe(12)
                 else:
-                    result=check(self.settings,progress=progress) if action=='check' else discover(self.settings,fields['subnet'],progress=progress)
+                    result=check(self.settings,progress=progress) if action=='check' else discover(self.settings,fields['subnet'],progress=progress,identify=self.identity_provider,web_probe=tcp)
                     self.record(result)
+                    if action=='discover':
+                        with self.lock:self.discovery=result
                 progress('Complete')
             except DiagnosticError as exc:progress(str(exc))
             except Exception:progress('Request could not finish. Previous readings retained; no retry was made.')
@@ -233,11 +260,13 @@ class Hub:
 
 def panels(hub, csrf):
     esc=lambda s:html.escape(str(s),quote=True)
-    subnets=''.join('<option value="'+esc(n)+'">'+esc(n)+'</option>' for n in hub.settings['networks'])
+    subnets=''.join('<option value="'+esc(n)+'"'+(' selected' if str(n)==hub.discovery_subnet else '')+'>'+esc(n)+'</option>' for n in hub.settings['networks'])
     network='''<section id="diagnostics"><h2>Diagnostics</h2><p id="diag-progress" role="status" aria-live="polite">Ready</p>
 <div class="toolbar"><button type="button" data-diagnostic="check">Check connectivity</button><select id="diag-subnet" aria-label="Discovery subnet">'''+subnets+'''</select><button type="button" data-diagnostic="discover">Discover devices</button></div>
 <p id="diag-summary"></p><div class="diagnostic-table"><table><thead><tr><th>Target</th><th>Ping</th><th>Latency</th></tr></thead><tbody id="diag-targets"></tbody></table></div><p id="diag-discovery"></p>
-<details id="diagnostic-observed"><summary>Observed devices</summary><div class="diagnostic-table"><table><thead><tr><th>Address</th><th>First seen</th><th>Last seen</th></tr></thead><tbody id="diag-observed"></tbody></table></div></details></section>'''
+<div class="diagnostic-table"><table><thead><tr><th>Manufacturer</th><th>Hostname</th><th>MAC address</th><th>IP address</th><th>Device type</th><th>Identity source</th><th>Web interface</th></tr></thead><tbody id="diag-devices"></tbody></table></div>
+<p class="report-caption">Unknown fields could not be identified. After Discover devices, that subnet refreshes every 20 minutes while automatic monitoring is enabled. Busy checks defer the next scan. Web links open on your device and require access to the local network. HTTPS may show the device's certificate warning. An open port does not verify a usable management page.</p>
+<details id="diagnostic-observed"><summary>Observed devices</summary><div class="diagnostic-table"><table><thead><tr><th>Manufacturer</th><th>Hostname</th><th>MAC address</th><th>IP address</th><th>Identity checked</th><th>Last reply</th></tr></thead><tbody id="diag-observed"></tbody></table></div></details></section>'''
     assistant='''<section id="ask-adr"><h2>Ask ADR</h2><p id="adr-native-status" role="status"></p><details id="adr-native-history"><summary>Native device events</summary><div id="adr-native-sources"></div><div id="adr-native-list"></div><label for="adr-native-source">Log source</label><select id="adr-native-source"></select><input id="adr-native-file" type="file" accept="text/plain,.txt,.log"><button type="button" id="adr-native-import">Import log</button><p id="adr-native-import-status" role="status"></p></details><form id="adr-question-form"><input type="hidden" id="diag-csrf" value="'''+esc(csrf)+'''">
 <label for="adr-question">Question</label><textarea id="adr-question" maxlength="1000" placeholder="What needs attention?" rows="3"></textarea>
 <p class="report-caption">Ask ADR sends your question and collected readings to OpenAI.</p>
@@ -246,3 +275,4 @@ def panels(hub, csrf):
 <p id="adr-transcript"></p><button type="button" id="adr-use-transcript" hidden>Use transcript</button><p id="adr-voice-status" role="status" aria-live="polite"></p></form>
 <div class="toolbar voice-output"><button type="button" id="adr-read-answer">Read answer</button><button type="button" id="adr-stop-reading">Stop reading</button></div><p id="adr-analysis-progress" role="status"></p><div id="adr-answer" aria-live="polite"></div></section>'''
     return network,assistant
+

@@ -192,7 +192,16 @@
     const body=diag(id);if(!body)return;
     const serialized=JSON.stringify(rows);if(body.dataset.rows===serialized)return;
     const fragment=document.createDocumentFragment();
-    for(const row of rows){const tr=document.createElement('tr');for(const value of row){const td=document.createElement('td');td.textContent=String(value??'Unverified');tr.append(td);}fragment.append(tr);}
+    for(const row of rows){const tr=document.createElement('tr');for(const value of row){const td=document.createElement('td');
+      if(value&&typeof value==='object'&&Array.isArray(value.web)){
+        const ip=String(value.ip||''),parts=ip.split('.');
+        const safe=parts.length===4&&parts.every(p=>/^(0|[1-9][0-9]{0,2})$/.test(p)&&Number(p)<=255)&&(parts[0]==='10'||(parts[0]==='172'&&Number(parts[1])>=16&&Number(parts[1])<=31)||(parts[0]==='192'&&parts[1]==='168'));
+        let links=0;
+        if(safe)for(const port of [443,80])if(value.web.some(s=>s.port===port&&s.status==='reachable')){
+          const link=document.createElement('a');link.href=(port===443?'https://':'http://')+ip+'/';link.target='_blank';link.rel='noopener noreferrer';link.textContent=port===443?'Open HTTPS':'Open HTTP';td.append(link);links++;
+        }
+        if(!links)td.textContent='Not detected';
+      }else td.textContent=String(value??'Unverified');tr.append(td);}fragment.append(tr);}
     body.replaceChildren(fragment);body.dataset.rows=serialized;
   }
   const siteTimezone=document.querySelector('meta[name="adr-site-timezone"]')?.content||'America/New_York';
@@ -256,8 +265,10 @@
       diag('diag-summary').textContent=state.summary;
       diag('adr-answer').textContent=state.answer;
       diagnosticRows('diag-targets',(result.targets||[]).map(t=>[t.ip,t.ping.status==='responded'?'Reply':t.ping.status==='no_reply'?'No reply':'Unverified',t.ping.average_ms==null?'Unverified':t.ping.average_ms+' ms']));
-      diag('diag-discovery').textContent=result.kind==='discovery'?result.responding.length+' replies / '+result.tested+' tested. Nonresponders remain unverified.':'';
-      diagnosticRows('diag-observed',(state.observed||[]).map(d=>[d.ip,localDate(d.first_seen),localDate(d.last_seen)]));
+      const discovery=state.discovery||(result.kind==='discovery'?result:{});
+      diag('diag-discovery').textContent=discovery.kind==='discovery'?discovery.responding.length+' replies / '+discovery.tested+' tested · '+localDate(discovery.checked_at)+'. Nonresponders remain unverified. '+(discovery.limitations||[]).join(' '):'';
+      diagnosticRows('diag-devices',(discovery.devices||[]).map(d=>[d.manufacturer||'Unknown',d.hostname||'Unknown',d.mac||'Unknown',d.ip,d.device_type||'Unknown',d.identity_source||'Unknown',{ip:d.ip,web:d.services||[]} ]));
+      diagnosticRows('diag-observed',(state.observed||[]).map(d=>[d.manufacturer||'Unknown',d.hostname||'Unknown',d.mac||'Unknown',d.ip,localDate(d.identity_checked_at),localDate(d.last_seen)]));
       document.querySelectorAll('button[data-diagnostic]').forEach(b=>{b.disabled=state.blocked||state.busy||diagnosticSubmitting||Boolean(window.ADRVoice?.busy())||(b.dataset.diagnostic==='ask'?!state.cloud_enabled:!state.enabled);});
     }catch(_){if(diag('diag-progress'))diag('diag-progress').textContent='Connection unavailable; previous readings retained.';}
     finally{clearTimeout(timeout);diagnosticPolling=false;}
@@ -293,4 +304,5 @@
 
   schedule();
 })();
+
 

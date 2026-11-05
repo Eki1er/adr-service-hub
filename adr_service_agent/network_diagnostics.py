@@ -42,7 +42,7 @@ def config(raw):
     # The configured WattBox is HTTP-only unless explicitly opted into HTTPS.
     wattbox=raw.get('wattbox_host','')
     wattbox=wattbox.strip() if isinstance(wattbox,str) else ''
-    c['http_only_targets']=[wattbox] if wattbox in c['targets'] and raw.get('diagnostics_wattbox_https') is not True else []
+    c['http_only_targets']=[wattbox] if wattbox and raw.get('diagnostics_wattbox_https') is not True else []
     name=raw.get('dns_name','example.com')
     if isinstance(name,str):name=name.strip()
     if not isinstance(name,str) or len(name)>253 or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?',name):
@@ -126,7 +126,7 @@ def check(c, probe=ping, connect=tcp, resolve=dns, progress=lambda _:None):
     return result
 
 
-def discover(c, subnet, probe=ping, progress=lambda _:None):
+def discover(c, subnet, probe=ping, progress=lambda _:None, identify=None, web_probe=None):
     selected=next((n for n in c['networks'] if str(n)==subnet),None)
     if selected is None:raise DiagnosticError('Choose a configured subnet.')
     ips=[str(ip) for ip in selected.hosts()]
@@ -139,12 +139,31 @@ def discover(c, subnet, probe=ping, progress=lambda _:None):
             except Exception:r={'status':'unverified'}
             rows.append({'ip':futures[future],'status':r['status']})
             progress('Discovery '+str(i+1)+' / '+str(len(ips)))
+    responding=[r['ip'] for r in sorted(rows,key=lambda x:ipaddress.ip_address(x['ip'])) if r['status']=='responded']
+    devices, identity_notes = [], []
+    if identify and responding:
+        progress('Reading device identities')
+        try:devices, identity_notes=identify(responding)
+        except Exception:identity_notes=['Device identity lookup unavailable; IP replies are retained.']
+    # Keep every responding IP visible, even if identity enrichment is unavailable.
+    devices=[dict(next((d for d in devices if d.get('ip')==ip),{}),ip=ip) for ip in responding]
+    if web_probe and devices:
+        progress('Checking web interface ports')
+        def ports(device):
+            result=[]
+            for port in ((80,) if device['ip'] in c.get('http_only_targets',[]) else (80,443)):
+                try:result.append(web_probe(device['ip'],port))
+                except Exception:result.append({'port':port,'status':'unverified'})
+            return dict(device,services=result)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            devices=list(executor.map(ports,devices))
     return {'kind':'discovery','checked_at':now(),'subnet':subnet,'tested':len(rows),
-        'responding':[r['ip'] for r in sorted(rows,key=lambda x:ipaddress.ip_address(x['ip'])) if r['status']=='responded'],
+        'responding':responding, 'devices':devices,
         'unverified_count':sum(r['status']=='unverified' for r in rows),
         'limitations':['Only ICMP responders are listed; this is not a complete device inventory.',
-            'MAC addresses, names and Wi-Fi associations are not established by this scan.',
-            'A missing reply is not an Offline diagnosis.']}
+            'Unknown identity fields could not be established; manufacturer is not inferred from a hostname.',
+            'An open web port only confirms a TCP connection; login, page availability and HTTPS certificate validity remain unverified.',
+            'A missing reply is not an Offline diagnosis.']+identity_notes}
 
 
 def save(path, value):
@@ -162,13 +181,27 @@ def retain(history, result=None):
     cutoff=time.time()-7*86400
     samples=[r for r in history.get('samples',[]) if isinstance(r,dict) and type(r.get('saved_at')) in (int,float) and r['saved_at']>=cutoff]
     if result is not None:samples.append({'saved_at':time.time(),'result':result})
-    history['samples']=samples[-96:]
+    # Enriched discovery rows are larger than bare IP lists. Keep the persisted
+    # history below the existing 2 MiB reader bound, including observed metadata.
+    bounded=[];size=0
+    for sample in reversed(samples[-96:]):
+        length=len(json.dumps(sample).encode())
+        if size+length>1200000:break
+        bounded.append(sample);size+=length
+    history['samples']=list(reversed(bounded))
     observed={}
     for sample in history['samples']:
         data=sample['result'];stamp=data.get('checked_at')
         ips=data.get('responding',[]) if data.get('kind')=='discovery' else [r['ip'] for r in data.get('targets',[]) if r.get('ping',{}).get('status')=='responded']
         for ip in ips:
             old=observed.get(ip,{'ip':ip,'first_seen':stamp})
+            identity=next((d for d in data.get('devices',[]) if d.get('ip')==ip),None)
+            if data.get('kind')=='discovery':
+                # Do not carry a previous tenant's identity across address reuse.
+                old={'ip':ip,'first_seen':old['first_seen']}
+                if identity:
+                    old.update({k:identity.get(k,'') for k in ('mac','hostname','name','manufacturer','device_type','identity_source')})
+                    old['identity_checked_at']=stamp
             observed[ip]={**old,'last_seen':stamp}
     history['observed']=list(observed.values())[-256:]
     return history
@@ -207,3 +240,4 @@ def import_report(raw):
             system['readings'] += [{k:scalar(row.get(k)) for k in ('name','state','unit','last_updated')} for row in s['internet_readings'][:16] if isinstance(row,dict)]
         output['systems'].append(system)
     return output
+

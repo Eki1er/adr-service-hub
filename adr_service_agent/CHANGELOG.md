@@ -1,3 +1,12 @@
+## 0.26.0
+
+- Enrich scoped device discovery with manufacturer, hostname, MAC and IP addresses, reported device type and identity source.
+- Read existing pinned UniFi client/device records; fall back to exact local ARP matches and bounded reverse DNS. Conflicting MAC identities remain unverified; do not guess manufacturers from hostnames or randomized MAC prefixes.
+- Refresh the last selected, still-allowed discovery subnet every 20 minutes when automatic monitoring and diagnostics are enabled. Persist attempts, defer busy scans and avoid catch-up bursts.
+- Check only TCP 80/443 on ICMP responders and provide click-to-open browser links. Keep the configured WattBox HTTP-only exception. Do not fetch pages or log in automatically.
+- Retain discovery results separately from connectivity checks; clear stale identities on address reuse and bound enriched history below the existing reader limit.
+- Requires a Green update and live validation after the current ping trial finishes.
+
 ## 0.25.1
 
 - Remove the empty UniFi gateway measurements dropdown from the Green Internet tile. Gateway readings and history remain in the UniFi tile.

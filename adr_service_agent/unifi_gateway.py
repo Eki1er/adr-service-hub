@@ -53,6 +53,7 @@ def request(config, pin, method, operation):
     routes = {'results':('GET', '/proxy/network/v2/api/site/' + config['site'] + '/speedtest'),
         'start':('POST', '/proxy/network/api/s/' + config['site'] + '/cmd/devmgr'),
         'devices':('GET', '/proxy/network/api/s/' + config['site'] + '/stat/device'),
+        'clients':('GET', '/proxy/network/api/s/' + config['site'] + '/stat/sta'),
         'networks':('GET', '/proxy/network/api/s/' + config['site'] + '/rest/networkconf')}
     if operation not in routes or method != routes[operation][0]:
         raise GatewayError('Unsupported gateway operation.')
@@ -161,4 +162,5 @@ def run(options, pin, request_fn=request, wait_fn=time.sleep):
         'fresh_values_confirmed':False,'quality_issues':[],'source':'unifi_gateway','gateway':result,
         'measurement_quality':'unverified','note':'UniFi accepted the request; a new completed result was not confirmed.',
         'limitations':['A new UniFi result was not confirmed within two minutes. The test may still be running; no second test was started.']}
+
 

@@ -1,4 +1,16 @@
-## Current release: 0.25.1
+## Current release: 0.26.0
+
+Discover devices now shows manufacturer, hostname, MAC and IP addresses, device
+role when reported, and links for responding HTTP/HTTPS ports. Unknown identity
+fields remain Unknown. The last selected discovery subnet refreshes every 20
+minutes while automatic monitoring is enabled. This is a local read-only scan;
+links open only when clicked and require local-network or VPN access.
+
+Let an active 24-hour monitoring trial finish before updating: installation
+restarts the app and ends that trial. Live identity coverage requires verification
+on the Green; see `adr_service_agent/DOCS.md`.
+
+## Previous release: 0.25.1
 
 Removes the empty UniFi gateway measurements dropdown from the Green Internet tile.
 Gateway measurements remain in the separate UniFi tile. Installing this update

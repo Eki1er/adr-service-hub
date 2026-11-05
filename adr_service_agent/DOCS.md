@@ -1,3 +1,55 @@
+## Device discovery identity and web links (0.26.0)
+
+Open Network → Diagnostics → Discover devices. Discovery remains scoped to one
+configured private IPv4 subnet of /24 or smaller and sends one ICMP echo per
+address with four workers. Only responding addresses are enriched. The table shows
+manufacturer, hostname, MAC address, IP address, reported device type and identity
+source. Unknown means the available evidence did not identify that field.
+
+Identity uses two bounded GET reads through the existing pinned UniFi gateway
+connection: active clients (`stat/sta`) and managed devices (`stat/device`). These
+legacy controller routes may reject the existing API key on some firmware; no
+login fallback, new credentials, or certificate bypass is attempted. Only fixed
+identity fields are retained. Managed-device type codes supply known roles; numeric
+fingerprint IDs are not guessed. Vendor OUI text is ignored for locally assigned
+MACs. Identity is controller-reported metadata, not a fresh device login.
+
+If needed, an exact IP match in the app container's local ARP table supplies a MAC;
+a routed next hop is never used as the remote device's MAC. Reverse DNS runs in a
+bounded child process with a two-second timeout and at most four workers. Conflicting
+MAC records suppress identity rather than choosing one. Subnets outside the
+container's local segment may have no ARP records. Manufacturer/hostname coverage
+therefore needs live testing against the installed gateway and DNS setup.
+
+After a manual discovery, the last selected allowed subnet refreshes every 20
+minutes while both automatic monitoring and diagnostics are enabled. Existing
+saved discovery history can supply the prior subnet on upgrade. No other subnet is
+inferred or scanned. Attempts are persisted before launching, scans defer while
+other checks/power actions are active, there is no overlapping scan or catch-up
+queue, and startup waits at least 60 seconds. Disable automatic_monitoring to stop
+recurring jobs. Manual discovery remains available. Failed attempts wait for the
+next interval. Connectivity/system checks do not erase the last discovery table.
+
+On responders only, bounded TCP connections check ports 80 and 443 (one-second
+socket timeout each, four workers). The configured WattBox remains HTTP-only unless
+its existing HTTPS opt-in is set. Reachable ports get Open HTTP/Open HTTPS links;
+no web page is fetched, certificate is approved, credentials are sent or login is
+attempted. The browser opens only on click in a new tab. Links use the literal
+private IP and require LAN/VPN access from the user's device; HTTPS can show the
+device's certificate warning. An open TCP port does not prove a usable web UI.
+
+Traffic is bounded to one ping per scoped host and two TCP connections per
+responder, plus the two controller reads and any reverse-DNS lookups. This is not a
+bandwidth test or general port scan. Enriched results use the existing seven-day,
+96-sample history with an additional size bound below 2 MiB; older samples can be
+pruned earlier when identity records are large. IP reuse clears prior identity
+fields, and identity timestamps remain separate from later ping observations.
+
+Install only after the current 24-hour trial completes: app installation restarts
+the agent and interrupts the trial. This revision has not run on the live Green.
+Validate manufacturer/hostname/MAC against the gateway, verify links locally, and
+confirm a second scan appears after 20 minutes without starting a speed test.
+
 ## Network Monitoring trial (0.25.0)
 
 Update ADR Service Agent to 0.25.0 and reopen its Web UI. Open **Network → Network

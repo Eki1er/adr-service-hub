@@ -6,12 +6,16 @@ function element(id=''){
     append(x){this.children.push(x);},replaceChildren(x){this.children=x?[x]:[];}};
 }
 for(const id of ['diagnostics','ask-adr','diag-progress','adr-analysis-progress','diag-summary',
- 'adr-native-status','adr-native-history','adr-native-sources','adr-native-list','adr-native-source','adr-native-file','adr-native-import','adr-native-import-status','adr-answer','diag-targets','diag-observed','diag-discovery','adr-question','diag-csrf','diag-subnet'])elements.set(id,element(id));
+ 'adr-native-status','adr-native-history','adr-native-sources','adr-native-list','adr-native-source','adr-native-file','adr-native-import','adr-native-import-status','adr-answer','diag-targets','diag-devices','diag-observed','diag-discovery','adr-question','diag-csrf','diag-subnet'])elements.set(id,element(id));
 elements.get('adr-question').value='Check my office';
 elements.get('diag-csrf').value='test-csrf';
 const buttons=['check','discover','ask'].map(action=>({...element(),dataset:{diagnostic:action}}));
 const state={progress:'Complete',answer:'<script>literal answer</script>',summary:'1 reply',enabled:true,cloud_enabled:true,
  native_events:{enabled:true,listener_running:true,sources:[],events:[]},busy:false,result:{targets:[]},observed:[],power_monitor:{enabled:true,status:'verified',current:{connected:true,power_lost:false,charge_percent:90,runtime_minutes:20},events:[]}};
+state.discovery={kind:'discovery',checked_at:'2026-11-05T02:00:00Z',responding:['192.168.16.2'],tested:254,devices:[
+ {manufacturer:'Apple',hostname:'<script>literal hostname</script>',mac:'00:11:22:33:44:55',ip:'192.168.16.2',services:[{port:443,status:'reachable'},{port:80,status:'refused'}]},
+ {ip:'192.168.16.2/evil',services:[{port:443,status:'reachable'}]}
+]};
 const document={hidden:false,forms:[],activeElement:null,
  querySelector:()=>null,querySelectorAll:s=>s==='button[data-diagnostic]'?buttons:[],
  getElementById:id=>elements.get(id),createElement:()=>element(),createDocumentFragment:()=>element(),
@@ -27,6 +31,13 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  await flush();assert.equal(calls.length,1);assert.equal(calls[0].url,'diagnostic-state');
  assert.equal(elements.get('adr-question').value,'Check my office');
  assert.equal(elements.get('adr-answer').textContent,state.answer);
+ const discovered=elements.get('diag-devices').children[0].children;
+ assert.equal(discovered[0].children[0].textContent,'Apple');
+ assert.equal(discovered[0].children[1].textContent,'<script>literal hostname</script>');
+ const link=discovered[0].children[6].children[0];
+ assert.equal(link.href,'https://192.168.16.2/');assert.equal(link.target,'_blank');assert.equal(link.rel,'noopener noreferrer');
+ assert.equal(discovered[0].children[6].children.length,1);
+ assert.equal(discovered[1].children[6].textContent,'Not detected');
  assert.match(elements.get('adr-native-status').textContent,/Delivery is verified only/);
  for(const tick of intervals)tick();await flush();
  assert.equal(calls.some(c=>c.options.method==='POST'),false);
@@ -38,3 +49,4 @@ const flush=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(elements.get('adr-question').value,'Check my office');
  console.log('Unified UI smoke check passed: GET-only polling, retained question/consent, one explicit POST, literal answer text.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
