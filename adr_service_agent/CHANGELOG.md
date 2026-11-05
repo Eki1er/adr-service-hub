@@ -1,3 +1,10 @@
+## 0.27.1
+
+- Count Bluesound audio zones by media-player entity rather than all readings or hardware devices. Multiple zones sharing one device or integration remain separate.
+- Show individual zone cards and separate registered zone count from available states. Disabled/unavailable players remain visible without being labeled online.
+- Reserve read capacity for player states when many sensors are present; keep existing global query limits and read-only access.
+- Live inventory completeness still requires validation against the actual zones.
+
 ## 0.27.0
 
 - Remove dot markers from history graphs and system tiles. Use connected trend lines, short bars for isolated readings, and existing discrete UPS observation bars.

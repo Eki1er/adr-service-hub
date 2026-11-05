@@ -34,6 +34,7 @@ def collect(token=None, entries_fn=entries, registries_fn=registries, read_fn=re
             'entries': available[:MAX_ENTRIES], 'entry_count': len(available),
             'devices': [], 'entity_inventory': [], 'readings': [], 'entity_count': 0,
             'enabled_supported_count': 0, 'disabled_count': 0, 'unsupported_count': 0,
+            'zones': [], 'zone_count': None,
             'truncated': len(available) > MAX_ENTRIES, 'inventory_truncated': False,
             'limitations': ['HA states are snapshots, not fresh tests of player connectivity or audio output.',
                 'Off/idle do not mean offline; unavailable/unknown states do not establish a physical device failure.',
@@ -80,14 +81,38 @@ def collect(token=None, entries_fn=entries, registries_fn=registries, read_fn=re
                 return {'entity_id': e['entity_id'], 'device_id': scalar(e.get('device_id')),
                     'name': scalar(e.get('name') or e.get('original_name')) or e['entity_id'],
                     'state': 'read failed', 'last_updated': None, 'attributes': {}}
+        # Reserve capacity for player states when diagnostic sensors are numerous.
+        # Multiple BluOS zones can share one physical device and config entry.
+        players=[e for e in enabled if e['entity_id'].startswith('media_player.')]
+        others=[e for e in enabled if not e['entity_id'].startswith('media_player.')]
+        selected=others[:MAX_READINGS-min(len(players),64)]+players[:64]
+        selected_ids={e['entity_id'] for e in selected}
+        selected += [e for e in enabled if e['entity_id'] not in selected_ids][:MAX_READINGS-len(selected)]
         with ThreadPoolExecutor(max_workers=8) as pool:
-            result['readings'] = list(pool.map(read, enabled[:MAX_READINGS]))
+            result['readings'] = list(pool.map(read, selected))
+        states={r['entity_id']:r for r in result['readings']}
+        zones={e['entity_id']:e for e in candidates if e['entity_id'].startswith('media_player.') and ENTITY.fullmatch(e['entity_id'])}
+        result['zone_count']=len(zones)
+        for entity_id,e in list(zones.items())[:1024]:
+            reading=states.get(entity_id,{})
+            disabled=bool(e.get('disabled_by')) or e.get('device_id') in blocked
+            result['zones'].append({'entity_id':entity_id,'device_id':scalar(e.get('device_id')),
+                'name':reading.get('name') or scalar(e.get('name') or e.get('original_name')) or entity_id,
+                'state':'disabled' if disabled else reading.get('state','not read'),
+                'last_updated':reading.get('last_updated'),'disabled':disabled})
         return result
     except Exception:
         raise BluesoundError('Could not inspect Bluesound through Home Assistant. Check the integration and API availability.') from None
 
 
 def report_payload(result):
-    return {'format': 'adr-bluesound-discovery-v1', 'agent_version': '0.19.1',
+    return {'format': 'adr-bluesound-discovery-v1', 'agent_version': '0.27.1',
         'read_only': True, 'source': 'existing_home_assistant_integration', 'snapshot': result}
+
+
+def zone_rows(snapshot):
+    if 'zones' in snapshot:return snapshot['zones']
+    # Older snapshots can still render player readings without counting sensors.
+    return [r for r in snapshot.get('readings',[]) if str(r.get('entity_id','')).startswith('media_player.')]
+
 

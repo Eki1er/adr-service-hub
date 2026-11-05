@@ -84,6 +84,8 @@ def assess(name, snapshot):
             usable = False
             limits.append('Select a UniFi device using its individual check.')
     if name in ('Bluesound', 'Sense'):
+        if name=='Bluesound' and type(snapshot.get('zone_count')) is int:
+            notes.append(str(snapshot['zone_count'])+' Bluesound audio zones inventoried separately from sensors and physical hardware.')
         entries = snapshot.get('entries', [])
         if not entries:
             usable = False
@@ -300,4 +302,5 @@ def run_checks(jobs, baselines, progress=lambda *_: None, secrets=(), history=()
     report['counts'] = {status: sum(c['status'] == status for c in report['checks'])
         for status in ('verified', 'review', 'unverified')}
     return redact(report, secrets), next_baselines
+
 

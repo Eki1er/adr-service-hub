@@ -27,6 +27,35 @@ def state(_, name):
 
 
 class BluesoundTests(unittest.TestCase):
+    def test_five_zones_on_shared_hardware_are_not_collapsed_or_counted_as_sensors(self):
+        from dashboard import tile_value,key_readings
+        from dashboard_visuals import visuals
+        registry=[entity('media_player.zone_'+str(i),device_id='shared') for i in range(5)]
+        registry+=[entity('sensor.temperature'),entity('binary_sensor.status')]
+        result=bluesound.collect(token='test',entries_fn=entries,registries_fn=lambda _: (registry,[]),read_fn=state)
+        self.assertEqual(result['zone_count'],5)
+        self.assertEqual(len(result['zones']),5)
+        self.assertEqual(len(result['readings']),7)
+        self.assertEqual(tile_value('Bluesound',result,[]),'5 zones · 5 states available')
+        self.assertEqual(key_readings('Bluesound',result)[0],'5 zones found')
+        output=visuals('Bluesound',result,[])
+        for i in range(5):self.assertIn('media_player.zone_'+str(i),output)
+
+    def test_players_are_not_dropped_when_many_sensors_use_the_read_budget(self):
+        registry=[entity('sensor.value_'+str(i)) for i in range(140)]
+        registry+=[entity('media_player.zone_'+str(i)) for i in range(5)]
+        result=bluesound.collect(token='test',entries_fn=entries,registries_fn=lambda _: (registry,[]),read_fn=state)
+        self.assertEqual(len(result['readings']),128)
+        self.assertEqual(result['zone_count'],5)
+        self.assertTrue(all(z['state']=='idle' for z in result['zones']))
+
+    def test_unavailable_or_disabled_player_remains_a_zone_without_claiming_online(self):
+        from dashboard import tile_value
+        registry=[entity('media_player.a'),entity('media_player.b',disabled_by='user')]
+        result=bluesound.collect(token='test',entries_fn=entries,registries_fn=lambda _: (registry,[]),read_fn=lambda *args:dict(state(*args),state='unavailable'))
+        self.assertEqual(result['zone_count'],2)
+        self.assertEqual(tile_value('Bluesound',result,[]),'2 zones · 0 states available')
+
     def test_multiple_players_exact_platform_no_controls_disabled_or_foreign_reads(self):
         registry = [entity('media_player.a'), entity('media_player.b', 'zone-b'),
             entity('button.sleep'), entity('media_player.disabled', disabled_by='user'),
@@ -122,3 +151,4 @@ class BluesoundTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+

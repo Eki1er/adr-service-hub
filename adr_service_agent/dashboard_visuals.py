@@ -63,6 +63,14 @@ def visuals(name, snapshot, lines):
     if not snapshot:
         return ''
     output = ''
+    if name == 'Bluesound':
+        from bluesound import zone_rows
+        zones=zone_rows(snapshot)
+        output+='<section class="bluesound-zones"><h4>Audio zones</h4><div class="managed-device-grid">'
+        for zone in zones:
+            state=str(zone.get('state') or 'unknown')
+            output+='<div class="managed-device"><div><strong>'+esc(zone.get('name','Unnamed zone'))+'</strong><span class="device-status">'+esc(state.capitalize())+'</span></div></div>'
+        output+='</div><p class="report-caption">Individual players reported by the Bluesound integration. Playback state does not verify audio output or physical connectivity.</p></section>'
     if name == 'Internet':
         return network_panels({'Internet':{'snapshot':snapshot}},include_access_points=False)
     if name in ('Araknis', 'CP4-R', 'UniFi'):

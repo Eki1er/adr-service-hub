@@ -1,4 +1,11 @@
-## Current release: 0.27.0
+## Current release: 0.27.1
+
+Bluesound now counts individual audio players as zones, separately from sensors,
+integration entries and physical hardware. The expanded tile lists each zone and
+its reported state. A reserved player-read budget prevents large sensor inventories
+from hiding zones. Live completeness still depends on the configured integration.
+
+## Previous release: 0.27.0
 
 Charts use lines and bars without dot markers. CPU/memory readings use semicircular
 needle gauges, UniFi managed devices have compact inventory cards, and discovery

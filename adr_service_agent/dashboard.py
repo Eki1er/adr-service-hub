@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dashboard_visuals import visuals, network_panels, history_chart
 from network_health import summary as network_summary
+from bluesound import zone_rows as bluesound_zones
 
 SYSTEMS = ('WattBox', 'Sonos', 'Bluesound', 'Ruckus', 'UniFi', 'Crestron', 'Control4', 'Araknis', 'CP4-R', 'Sense', 'Internet')
 
@@ -83,6 +84,12 @@ def key_readings(name, snapshot):
             direct = snapshot['controller'].get('access_points', [])
             lines[0] = str(len(direct)) + ' access points read directly from controller'
             lines.append(str(sum(ap.get('online') is True for ap in direct)) + ' online; ' + str(sum(ap.get('online') is False for ap in direct)) + ' offline; ' + str(sum(ap.get('online') is None for ap in direct)) + ' unverified')
+    elif name == 'Bluesound':
+        zones=bluesound_zones(snapshot)
+        count=snapshot.get('zone_count',len(zones) if zones else None)
+        lines.append(str(count)+' zones found' if count is not None else 'Zone count unverified')
+        for zone in zones[:7]:
+            lines.append(str(zone.get('name','Zone'))+': '+str(zone.get('state','unknown')))
     else:
         readings = snapshot.get('readings', snapshot.get('players', []))
         available = sum(r.get('state') not in ('unknown', 'unavailable', 'read failed') for r in readings)
@@ -133,6 +140,12 @@ SYSTEM_ICONS = {'Internet': 'network', 'WattBox': 'power', 'Sense': 'energy', 'U
 
 
 def tile_value(name, snapshot, lines):
+    if name == 'Bluesound':
+        zones=bluesound_zones(snapshot)
+        count=snapshot.get('zone_count',len(zones) if zones else None)
+        if count is None:return 'Zone count unverified'
+        states=sum(z.get('state') not in (None,'unknown','unavailable','read failed','not read','disabled') for z in zones)
+        return str(count)+' zones · '+str(states)+' states available'
     if name == 'Internet':
         values=[]
         for kind in ('download','upload'):
