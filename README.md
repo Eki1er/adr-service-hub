@@ -1,4 +1,8 @@
-## Current release: 0.26.0
+## Current release: 0.26.1
+
+Device discovery columns now begin Manufacturer, IP address, Hostname, MAC address.
+
+## Previous release: 0.26.0
 
 Discover devices now shows manufacturer, hostname, MAC and IP addresses, device
 role when reported, and links for responding HTTP/HTTPS ports. Unknown identity

@@ -267,8 +267,8 @@
       diagnosticRows('diag-targets',(result.targets||[]).map(t=>[t.ip,t.ping.status==='responded'?'Reply':t.ping.status==='no_reply'?'No reply':'Unverified',t.ping.average_ms==null?'Unverified':t.ping.average_ms+' ms']));
       const discovery=state.discovery||(result.kind==='discovery'?result:{});
       diag('diag-discovery').textContent=discovery.kind==='discovery'?discovery.responding.length+' replies / '+discovery.tested+' tested · '+localDate(discovery.checked_at)+'. Nonresponders remain unverified. '+(discovery.limitations||[]).join(' '):'';
-      diagnosticRows('diag-devices',(discovery.devices||[]).map(d=>[d.manufacturer||'Unknown',d.hostname||'Unknown',d.mac||'Unknown',d.ip,d.device_type||'Unknown',d.identity_source||'Unknown',{ip:d.ip,web:d.services||[]} ]));
-      diagnosticRows('diag-observed',(state.observed||[]).map(d=>[d.manufacturer||'Unknown',d.hostname||'Unknown',d.mac||'Unknown',d.ip,localDate(d.identity_checked_at),localDate(d.last_seen)]));
+      diagnosticRows('diag-devices',(discovery.devices||[]).map(d=>[d.manufacturer||'Unknown',d.ip,d.hostname||'Unknown',d.mac||'Unknown',d.device_type||'Unknown',d.identity_source||'Unknown',{ip:d.ip,web:d.services||[]} ]));
+      diagnosticRows('diag-observed',(state.observed||[]).map(d=>[d.manufacturer||'Unknown',d.ip,d.hostname||'Unknown',d.mac||'Unknown',localDate(d.identity_checked_at),localDate(d.last_seen)]));
       document.querySelectorAll('button[data-diagnostic]').forEach(b=>{b.disabled=state.blocked||state.busy||diagnosticSubmitting||Boolean(window.ADRVoice?.busy())||(b.dataset.diagnostic==='ask'?!state.cloud_enabled:!state.enabled);});
     }catch(_){if(diag('diag-progress'))diag('diag-progress').textContent='Connection unavailable; previous readings retained.';}
     finally{clearTimeout(timeout);diagnosticPolling=false;}

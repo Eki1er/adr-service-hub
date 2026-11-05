@@ -1,3 +1,7 @@
+## 0.26.1
+
+- Move IP address directly after Manufacturer in discovery and observed-device tables.
+
 ## 0.26.0
 
 - Enrich scoped device discovery with manufacturer, hostname, MAC and IP addresses, reported device type and identity source.
