@@ -97,7 +97,7 @@ class DashboardTests(unittest.TestCase):
                 rendered = page(pilot)
                 parser = DetailsParser(); parser.feed(rendered)
                 self.assertEqual(parser.depth, 0)
-                self.assertEqual(parser.articles, len(SYSTEMS))
+                self.assertEqual(parser.articles, len(SYSTEMS) + 1)  # Opt-in Network Monitoring card.
             report, _ = run_checks([('Sonos', 'a', lambda: {'players': [{'name': '<script>bad</script>', 'state': 'idle'}]})], {})
             rendered = cards(report)
             self.assertNotIn('<script>', rendered)
@@ -125,4 +125,5 @@ class DashboardTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
 

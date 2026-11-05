@@ -22,6 +22,8 @@ from usb_ups import USBUPS
 from power_events import PowerJournal, identity as power_identity
 from power_history import ElectricalHistory
 from monitoring import MonitoringSchedule
+from network_trial import NetworkTrial
+from network_trial_ui import panel as network_trial_panel
 from presentation import present_html
 from ui_icons import icon
 from internet_test import InternetTestError
@@ -255,6 +257,7 @@ class Pilot:
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
         self.monitor_active = False
+        self.network_trial = NetworkTrial(self.data / 'network_trial.json', self.araknis_options)
 
     def monitoring_busy(self):
         return bool(getattr(self, "diagnostics", None) and self.diagnostics.busy) or any((self.ups_running, self.service_running, self.internet_test_running, self.controller_running,
@@ -269,15 +272,16 @@ class Pilot:
             else:
                 self.start_network_job('internet_test', scheduled=True)
         with self.lock:
-            return self.monitor.tick(dispatch, busy=self.monitoring_busy())
+            return self.monitor.tick(dispatch, busy=self.monitoring_busy(), defer_speedtest=self.network_trial.running)
 
     def start_monitoring(self):
-        if (not self.monitor.enabled and not self.wattbox_ups_monitoring_enabled()) or self.monitor_active:
+        if (not self.monitor.enabled and not self.wattbox_ups_monitoring_enabled() and not self.network_trial.running) or self.monitor_active:
             return
         self.monitor_active = True
         def loop():
             try:
                 while not self.monitor_stop.wait(5):
+                    self.network_trial.tick()
                     self.monitoring_tick()
                     self.power_tick()
             finally:
@@ -600,6 +604,8 @@ class Pilot:
         self.audit('ruckus_online_code_verified')
 
     def start_network_job(self, kind, scheduled=False, source='green'):
+        if kind == 'internet_test' and self.network_trial.running:
+            raise ProtocolError('Stop the network monitoring trial before running a speed test.')
         if kind not in ('internet_test', 'controller'):
             raise ProtocolError('Unsupported network check.')
         if any((self.service_running, self.internet_test_running, self.controller_running, self.active, self.araknis_running, self.cp4_running, self.crestron_running, self.control4_running, self.bluesound_running, self.sense_running)):
@@ -1111,10 +1117,10 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     text = '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     if (pilot.service_running or pilot.internet_test_running or pilot.controller_running or pilot.active) and not pilot.power_pending and not pilot.gateway_candidate:
         text += '<meta name="adr-refresh" content="3">'
-    elif pilot.monitor_active and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
+    elif (pilot.monitor_active or pilot.network_trial.running) and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
     text += '<meta name="adr-site-timezone" content="'+esc(site_timezone_name())+'">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr" data-ask-shortcut>{icon("ask")}<span>Ask ADR</span></a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.24.6</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr" data-ask-shortcut>{icon("ask")}<span>Ask ADR</span></a><a href="#history">History</a><a href="#connections">Connections</a></nav><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.25.0</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.current_service_report()
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1188,7 +1194,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     if pilot.araknis_options.get('allow_outlet_control') is not True:
         outlet_markup += '<p class="report-caption">Enable allow_outlet_control in Configuration to use outlet controls.</p>'
     network_diagnostics_markup, assistant_markup = diagnostic_panels(pilot.diagnostics, pilot.csrf)
-    text += grouped_cards(report, outlet_controls=outlet_markup, diagnostics_markup=network_diagnostics_markup, ups_status=pilot.usb_ups.status())
+    text += grouped_cards(report, outlet_controls=outlet_markup, diagnostics_markup=network_diagnostics_markup, ups_status=pilot.usb_ups.status(), monitoring_markup=network_trial_panel(pilot.network_trial, pilot.csrf))
     text += assistant_markup
     text += monitoring_panel(pilot) + network_tools
     text += '</section>'
@@ -1831,6 +1837,25 @@ class Handler(BaseHTTPRequestHandler):
         action = urlsplit(self.path).path.strip('/')
         with pilot.lock:
             try:
+                # Stop/download remain available during other checks and power review.
+                if action == 'network-trial-stop':
+                    pilot.network_trial.stop()
+                    self.send_page()
+                    return
+                if action == 'network-trial-report':
+                    trial = pilot.network_trial
+                    with trial.lock:
+                        trial._prune()
+                        body = json.dumps({'format': 'adr-network-trial-v1', 'sessions': trial.sessions, 'samples': trial.samples}, indent=2).encode()
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Disposition', 'attachment; filename="ADR-Network-Monitoring.json"')
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.send_header('Content-Length', str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
                 pending = getattr(pilot, 'power_pending', None)
                 if pending and time.monotonic()-pending['created']<=120 and action not in ('outlet-confirm','outlet-cancel','refresh','service-report'):
                     raise ProtocolError('Confirm or cancel the pending outlet action first.')
@@ -1842,7 +1867,19 @@ class Handler(BaseHTTPRequestHandler):
                     raise ProtocolError('Wait for diagnostics to finish.')
                 if getattr(pilot, 'ups_running', False) and action not in ('refresh', 'service-report', 'araknis-identity', 'araknis-trust', 'araknis-check', 'araknis-diagnostics', 'araknis-discover', 'araknis-report'):
                     raise ProtocolError('A power status check is running. Wait for it to finish.')
-                if action == 'ups-read':
+                if action == 'network-trial-start':
+                    if pilot.monitoring_busy():
+                        raise ProtocolError('Wait for the current check or power action to finish.')
+                    try:
+                        pilot.network_trial.start()
+                        pilot.start_monitoring()
+                    except ValueError as exc:
+                        raise ProtocolError(str(exc)) from None
+                    except Exception:
+                        pilot.network_trial.stop('failed')
+                        raise ProtocolError('Network monitoring could not start. No automatic retry was made.') from None
+                    self.send_page()
+                elif action == 'ups-read':
                     pilot.start_power_check()
                     self.send_page()
                 elif action.startswith('diagnostic-'):
@@ -1992,11 +2029,12 @@ def main():
     server.pilot.native_events.start()
     server.pilot.usb_ups.start()
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.24.1 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.25.0 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:
         server.pilot.monitor_stop.set()
+        server.pilot.network_trial.close()
         server.pilot.native_events.close()
         server.pilot.usb_ups.close()
         server.server_close()
@@ -2004,4 +2042,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

@@ -1,3 +1,51 @@
+## Network Monitoring trial (0.25.0)
+
+Update ADR Service Agent to 0.25.0 and reopen its Web UI. Open **Network → Network
+Monitoring → Start 24-hour trial**. Uses the existing `unifi_gateway_host` setting;
+it must contain a private, non-loopback unicast IP address (the pilot gateway is
+192.168.16.1). No new options, API key, certificate approval or separate app is
+required for ICMP. This setting identifies the target; the trial makes no router
+configuration changes.
+
+The Green sends five ICMP echo probes to each of the gateway, 1.1.1.1 and 8.8.8.8
+once per minute. Three targets run concurrently with a nine-second subprocess
+timeout each, no shell and no automatic retry. At most one sample batch is active.
+The first five minutes are marked as baseline. Baseline latency is weighted by
+received packets; loss uses confirmed sent/received counts. Failed/malformed
+commands remain unknown, never zero loss or confirmed outages. Chart paths break
+on missing values or more than 90 seconds between samples. This is endpoint
+sampling, without per-hop route tracing or precise outage durations.
+
+Collection runs with the page closed and stops at the original 24-hour deadline
+(also bounded by a monotonic timer). Duplicate Start clicks do not extend it.
+**Stop trial** stops new batches and retains history. In-flight bounded probes
+can finish after Stop but do not append a sample. Stop and download remain
+available while other checks run. An app restart or shutdown interrupts the trial;
+start explicitly again afterward. No missed samples are fabricated or replayed.
+
+Private app storage retains seven days of history, bounded to 10,080 batches and
+32 trials; the next write prunes expired data. Charts show the latest trial and
+**Download monitoring history** exports all retained trials with target addresses
+and measurement timestamps. The file contains no API keys or app options. Protect
+it as network diagnostic data. A corrupt existing file is left unchanged and blocks
+new trials. Storage failures stop collection with an explicit warning.
+
+ADR's manual and scheduled speed tests are deferred while the trial is running;
+existing read-only system checks and UPS monitoring continue. Scheduled speed tests
+resume on their original due times after Stop/completion, without a catch-up queue.
+Other apps' own test schedules are not changed. The trial never calls speed-test,
+device-control or configuration APIs. It works even if regular automatic monitoring
+is disabled. Ingress authorization and CSRF apply to Start, Stop and download.
+
+Live acceptance on Green: verify that the target shown is 192.168.16.1, start once,
+confirm the deadline and increasing sample count, check replies against a wired
+test, and inspect both charts. Stop once and verify the count stops increasing
+while the history download remains available. Start a fresh trial and leave the
+app running for the 24-hour check. ICMP filtering/deprioritization can resemble loss;
+missing gateway or public replies do not establish a device or ISP fault. Automated
+tests use simulated responses; Green build, ICMP permissions and the live 24-hour
+run have not been observed from the development environment.
+
 ## WattBox electrical history and controls (0.24.6)
 
 The WattBox tile shows total measured voltage (V) and current (A), with separate

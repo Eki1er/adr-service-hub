@@ -1,3 +1,12 @@
+## 0.25.0
+
+- Add Network → Network Monitoring with Start/Stop for an opt-in 24-hour ICMP trial.
+- Sample the configured gateway, Cloudflare and Google once per minute, with a five-minute baseline, latency/loss charts and a JSON history download.
+- Stop at the original deadline; duplicate starts cannot extend it. Stop retains history; app restarts interrupt trials without silently resuming.
+- Retain up to seven days, 10,080 samples and 32 trials. Missing/failed readings remain unknown; storage errors stop collection.
+- Defer ADR speed tests during the trial; existing system checks continue. Speed tests resume on their existing schedule after the trial.
+- Requires Green installation and live ICMP verification; simulated tests do not establish live connectivity.
+
 ## 0.24.6
 
 - Replace outlet-state graphs with whole-WattBox voltage and amperage readings and history, using the documented read-only PowerStatus query.
@@ -412,4 +421,3 @@
 - Initial experimental WattBox connector with ingress UI, SSH identity pinning,
   outlet inventory, confirmed single-outlet RESET, cooldown and power verification.
 - Hardware build and live integration testing remain pending.
-

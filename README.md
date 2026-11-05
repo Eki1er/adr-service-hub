@@ -1,3 +1,13 @@
+## Current release: 0.25.0
+
+Adds an opt-in **Network → Network Monitoring** item for a 24-hour latency and
+packet-loss trial, using the configured gateway IP plus Cloudflare and Google.
+Update ADR Service Agent, reopen its Web UI, and select **Start 24-hour trial**.
+The first five minutes are baseline; Start/Stop, automatic stop and retained history
+are included. ADR speed tests pause during the trial and resume afterward. An app
+restart ends the trial; start explicitly again to collect more. See
+`adr_service_agent/DOCS.md` for retention, measurement limits and live acceptance.
+
 ## Development: network diagnostics 0.24.0
 
 UniFi-first read-only network evidence, STP port-state/counter comparisons,

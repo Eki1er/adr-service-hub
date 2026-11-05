@@ -8,5 +8,7 @@ COPY agent.py wattbox.py sonos.py ruckus.py unifi.py araknis.py crestron.py cp4.
 COPY green_network.py ./
 COPY ookla_addon.py ./
 COPY power_history.py ./
+COPY network_trial.py network_trial_ui.py ./
 CMD ["python", "-u", "agent.py"]
+
 

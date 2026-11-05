@@ -58,12 +58,14 @@ class MonitoringSchedule:
         except OSError:
             self.persistence_error = 'Monitoring times could not be saved. Restarting may reset the next run times.'
 
-    def tick(self, dispatch, busy=False):
+    def tick(self, dispatch, busy=False, defer_speedtest=False):
         """Caller serializes this with manual operations using the app lock."""
         if busy or not self.enabled:
             return None
         # A due speed test runs before a due report, so the report can read its results.
         for kind in ('internet_test', 'service'):
+            if kind == 'internet_test' and defer_speedtest:
+                continue
             if self.active(kind) and self.clock() >= self.next_due[kind]:
                 self.record_start(kind)
                 try:
@@ -76,3 +78,4 @@ class MonitoringSchedule:
 
     def next_time(self, kind):
         return datetime.fromtimestamp(self.next_due[kind], timezone.utc).isoformat()
+

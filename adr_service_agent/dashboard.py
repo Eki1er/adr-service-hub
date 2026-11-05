@@ -254,7 +254,7 @@ def ups_panel(status):
     return output
 
 
-def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None):
+def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None, monitoring_markup=""):
     checks = {c['system']: c for c in (report or {}).get('checks', [])}
     output = '<div class="dashboard-groups" id="systems">'
     for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS]:
@@ -274,6 +274,7 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=
         output += '<div class="system-group group-' + key + '"><div class="section-label"><h2>' + title + '</h2></div>'
         if key == 'power': output += ups_panel(ups_status or {})
         if key == 'network':
+            output += '<div class="system-grid">'+monitoring_markup+'</div>' if monitoring_markup else ''
             output += cards(report,('Internet',)).replace('class="system-grid"','class="system-grid internet-feature"',1)
             output += network_panels(checks, include_internet=False)
             diagnostic_check=checks.get('Network diagnostics')
@@ -287,4 +288,5 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=
                 output += diagnostics_markup
         output += cards(report, tuple(n for n in names if n!='Internet'), outlet_controls=outlet_controls) + '</div>'
     return output + '</div>'
+
 
