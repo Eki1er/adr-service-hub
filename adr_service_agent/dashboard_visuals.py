@@ -26,11 +26,37 @@ def gauge(label, value):
     if value is None or not 0 <= value <= 100:
         return ''
     text = f'{value:g}%'
-    return ('<div class="gauge"><svg viewBox="0 0 120 100" role="img" aria-label="' + esc(label + ': ' + text) + '">'
-        '<title>' + esc(label + ': ' + text) + '</title><circle cx="60" cy="46" r="35" class="gauge-track"/>'
-        '<circle cx="60" cy="46" r="35" class="gauge-fill" pathLength="100" stroke-dasharray="' + str(value) + ' 100" transform="rotate(-90 60 46)"/>'
-        '<text x="60" y="47" class="gauge-value" text-anchor="middle">' + text + '</text>'
-        '<text x="60" y="64" class="gauge-label" text-anchor="middle">' + esc(label) + '</text></svg></div>')
+    angle=math.pi*(1-value/100)
+    x,y=80+math.cos(angle)*53,88-math.sin(angle)*53
+    return ('<div class="gauge"><svg viewBox="0 0 160 145" role="img" aria-label="' + esc(label + ': ' + text) + '">'
+        '<title>' + esc(label + ': ' + text) + '</title><path d="M18 88 A62 62 0 0 1 142 88" class="gauge-track"/>'
+        '<path d="M18 88 A62 62 0 0 1 142 88" class="gauge-fill" pathLength="100" stroke-dasharray="' + str(value) + ' 100"/>'
+        f'<path d="M80 88L{x:.2f} {y:.2f}" class="gauge-needle"/>'
+        '<text x="16" y="105" class="gauge-scale">0</text><text x="144" y="105" text-anchor="end" class="gauge-scale">100</text>'
+        '<text x="80" y="113" class="gauge-value" text-anchor="middle">' + text + '</text>'
+        '<text x="80" y="135" class="gauge-label" text-anchor="middle">' + esc(label) + '</text></svg></div>')
+
+
+def managed_device_cards(network):
+    devices=network.get('devices',[])[:64]
+    if not devices:return ''
+    output='<section class="managed-inventory"><header><h4>UniFi devices</h4><span>'+str(len(devices))+' reported</span></header>'
+    for title,types in (('Gateways',('ugw','udm','uxg')),('Switches',('usw',)),('Access points',('uap',))):
+        rows=[d for d in devices if d.get('type') in types]
+        if not rows:continue
+        output+='<h5>'+title+'</h5><div class="managed-device-grid">'
+        for device in rows:
+            state=device.get('state') if device.get('state') in ('online','offline') else 'unverified'
+            uptime=device.get('uptime_seconds')
+            detail='Uptime unreported'
+            if type(uptime) is int and uptime>=0:
+                detail='Up '+(str(uptime//86400)+'d' if uptime>=86400 else str(uptime//3600)+'h' if uptime>=3600 else str(uptime//60)+'m')
+            ports=device.get('ports',[])
+            known=[p for p in ports if p.get('link') in ('up','down')]
+            if known:detail+=' · '+str(sum(p['link']=='up' for p in known))+'/'+str(len(known))+' ports linked'
+            output+='<div class="managed-device device-'+state+'"><div><strong>'+esc(device.get('name','Unnamed device'))+'</strong><span class="device-status">'+{'online':'Online','offline':'Offline','unverified':'Unverified'}[state]+'</span></div><small>'+esc(detail)+'</small></div>'
+        output+='</div>'
+    return output+'<p class="report-caption">Controller-reported inventory and state · managed devices only</p></section>'
 
 
 def visuals(name, snapshot, lines):
@@ -80,6 +106,8 @@ def visuals(name, snapshot, lines):
         output+='<small>'+esc(history.get('note','Whole-WattBox readings; unavailable measurements remain gaps.'))+'</small></div>'
     if name == 'UniFi' and snapshot.get('gateway_speedtest'):
         output += network_panels({'UniFi':{'snapshot':snapshot}},include_access_points=False)
+    if name == 'UniFi':
+        output += managed_device_cards(snapshot.get('network_health') or {})
     if name == 'Sense':
         series = snapshot.get('history', {}).get('series', [])
         output += '<div class="sense-history"><h4>Past 24 hours</h4>'
@@ -137,10 +165,10 @@ def history_chart(series):
         if series.get('observation_ticks'):
             for x,y in segment:output += f'<path d="M{x:.2f} {y-7:.2f}v14" class="state-observation"/>'
         elif series.get('points_only'):
-            for x,y in segment:output += f'<circle cx="{x:.2f}" cy="{y:.2f}" r="3" class="chart-point"/>'
+            for x,y in segment:output += f'<path d="M{x-4:.2f} {y:.2f}h8" class="chart-sample-bar"/>'
         elif len(segment) == 1:
             x, y = segment[0]
-            output += f'<circle cx="{x:.2f}" cy="{y:.2f}" r="3" class="chart-point"/>'
+            output += f'<path d="M{x-4:.2f} {y:.2f}h8" class="chart-sample-bar"/>'
         else:
             coords = ' '.join(('M' if i == 0 else 'L') + f'{x:.2f},{y:.2f}' for i, (x, y) in enumerate(segment))
             output += '<path d="' + coords + '" class="chart-line"/>'
@@ -161,7 +189,7 @@ def history_chart(series):
     return output
 
 
-def trend_chart(series_list, title, unit):
+def trend_chart(series_list, title, unit, timeline=False):
     """Shared axes for scheduled tests; line joins indicate trends between tests."""
     from dashboard import site_timezone_name
     try: zone = ZoneInfo(site_timezone_name())
@@ -181,25 +209,29 @@ def trend_chart(series_list, title, unit):
             if label.startswith(prefix): label=label[len(prefix):]
         rows.append((label,points))
     valid=[(t,v) for _,points in rows for t,v in points if v is not None]
-    output='<section class="trend-card" data-trend-card="'+esc(title)+'"><header><h4>'+esc(title)+'</h4><div class="trend-controls"><label>Show <select data-trend-series><option value="all">All readings</option>'
+    default='day' if timeline else 'week'
+    output='<section class="trend-card'+(' speed-timeline' if timeline else '')+'" data-trend-card="'+esc(title)+'"><header><h4>'+esc(title)+'</h4><div class="trend-controls">'+('<select data-trend-series hidden aria-label="Both speed series">' if timeline else '<label>Show <select data-trend-series>')+'<option value="all">All readings</option>'
     for i,(label,_) in enumerate(rows):output+='<option value="'+str(i)+'">'+esc(label)+'</option>'
-    output+='</select></label><label>Period <select data-trend-range><option value="week">Week</option><option value="day">24 hours</option><option value="all">All recorded</option></select></label></div></header>'
+    output+='</select>'+('' if timeline else '</label>')+'<label>Period <select data-trend-range><option value="week">Week</option><option value="day"'+(' selected' if timeline else '')+'>24 hours</option><option value="all">All recorded</option></select></label></div></header>'
     if not valid:return output+'<p class="empty-state">Awaiting recorded '+esc(title.lower())+' results.</p></section>'
     last=max(t for t,_ in valid);first=min(t for t,_ in valid)
     for key,seconds in (('week',7*86400),('day',86400),('all',max(last-first,1))):
         start=max(first,last-seconds); selected=[(t,v) for t,v in valid if start<=t<=last]
         maximum=max([v for _,v in selected]+[1]); ceiling=math.ceil(maximum/5)*5 if maximum<=20 else math.ceil(maximum/100)*100
-        def x(t):return 64+(t-start)/max(last-start,1)*512
+        def x(t):return 320 if last==start else 64+(t-start)/(last-start)*512
         def y(v):return 200-v/ceiling*160
-        output+='<div data-trend-window="'+key+'"'+(' hidden' if key!='week' else '')+'><div class="trend-legend">'
+        output+='<div data-trend-window="'+key+'"'+(' hidden' if key!=default else '')+'><div class="trend-legend">'
         for i,(label,_) in enumerate(rows):output+='<span data-trend-item="'+str(i)+'" class="trend-color-'+str(i%4)+'"><i></i>'+esc(label)+'</span>'
-        output+='</div><svg class="trend-chart" viewBox="0 0 600 250" role="img" aria-label="'+esc(title)+'"><title>'+esc(title)+'</title>'
+        output+='</div><svg class="trend-chart" viewBox="0 0 600 280" role="img" aria-label="'+esc(title)+'"><title>'+esc(title)+'</title><text x="64" y="22">'+esc(unit)+'</text>'
         for i in range(6):
             yy=40+i*32;value=ceiling*(5-i)/5
             output+=f'<path d="M64 {yy}H576" class="chart-grid"/><text x="55" y="{yy+4}" text-anchor="end">{value:g}</text>'
-        for i in range(4):
+        for i in (range(4) if last>start else (0,)):
             t=start+(last-start)*i/3;xx=x(t);local=datetime.fromtimestamp(t,zone)
-            output+=f'<path d="M{xx:.2f} 40V200" class="chart-grid"/><text x="{xx:.2f}" y="223" text-anchor="'+('start' if i==0 else 'end' if i==3 else 'middle')+'">'+local.strftime('%b %d' if last-start>86400 else '%H:%M')+'</text>'
+            anchor='middle' if last==start else 'start' if i==0 else 'end' if i==3 else 'middle'
+            output+=f'<path d="M{xx:.2f} 40V200" class="chart-grid"/><text class="timeline-time" x="{xx:.2f}" y="226" text-anchor="'+anchor+'">'+local.strftime('%I:%M %p').lstrip('0')+'</text>'
+            if datetime.fromtimestamp(start,zone).date()!=datetime.fromtimestamp(last,zone).date():
+                output+=f'<text class="timeline-date" x="{xx:.2f}" y="250" text-anchor="'+anchor+'">'+local.strftime('%b %d')+'</text>'
         for i,(label,points) in enumerate(rows):
             # Throughput is discrete: connect daily tests, but break missed daily runs.
             # Latency uses a shorter bound and explicit unknowns always break a path.
@@ -220,18 +252,29 @@ def trend_chart(series_list, title, unit):
                     output+='<path d="'+path+'" class="trend-line"/>'
                 for t,v in segment:
                     caption=label+': '+f'{v:g} '+unit+' · '+datetime.fromtimestamp(t,zone).strftime('%b %d, %I:%M %p %Z')
-                    output+=f'<circle cx="{x(t):.2f}" cy="{y(v):.2f}" r="3" class="trend-sample"><title>'+esc(caption)+'</title></circle>'
+                    # Transparent hit rectangles preserve exact sample tooltips
+                    # without drawing point markers over the trend line.
+                    output+=f'<rect x="{x(t)-9:.2f}" y="{y(v)-12:.2f}" width="18" height="24" class="trend-hit" data-sample-detail="'+esc(caption)+'"><title>'+esc(caption)+'</title></rect>'
+                    if len(segment)==1:
+                        output+=f'<path d="M{x(t)-5:.2f},{y(v):.2f}h10" class="trend-isolated"/>'
             output+='</g>'
         output+='</svg><small>'+esc(unit)+' · '+str(len(selected))+' recorded readings · '+esc(datetime.fromtimestamp(last,zone).strftime('%Z'))+'</small></div>'
+    output+='<p class="trial-selected-sample" data-trial-detail data-trial-session="'+esc(title)+'" role="status">Tap a line for its measured value and test time.</p>'
+    if timeline and any(sum(v is not None for _,v in points)<2 for _,points in rows):
+        output+='<p class="report-caption">Each line needs at least two recorded tests. A single test is shown as a short bar at its measurement time.</p>'
     output+='<p class="report-caption">Periods end at the latest recorded reading: '+esc(datetime.fromtimestamp(last,zone).strftime('%b %d · %I:%M %p %Z'))+'. Lines show trends between tests; long gaps and unavailable readings remain breaks.</p></section>'
     return output
 
 
 def network_history_charts(history, source):
-    speed=[s for s in history if s.get('unit') in ('Mbps','Mbit/s') and any(w in str(s.get('name','')).lower() for w in ('download','upload'))][:2]
+    candidates=[s for s in history if s.get('unit') in ('Mbps','Mbit/s') and any(w in str(s.get('name','')).lower() for w in ('download','upload'))]
+    speed=[]
+    for direction in ('download','upload'):
+        matches=[s for s in candidates if str(s.get('name','')).lower().endswith(direction)]
+        if matches:speed.append(next((s for s in matches if s.get('points')),matches[0]))
     latency=[s for s in history if s.get('unit')=='ms' and any(w in str(s.get('name','')).lower() for w in ('latency','ping'))][:4]
-    used={id(s) for s in speed+latency}
-    output=trend_chart(speed,source+' Internet test history','Mbit/s')
+    used={id(s) for s in candidates+latency}
+    output=trend_chart(speed,source+' Internet test history','Mbit/s',timeline=True)
     if latency:output+=trend_chart(latency,source+' latency history','ms')
     for series in [s for s in history if id(s) not in used][:4]:output+=history_chart(series)
     return output

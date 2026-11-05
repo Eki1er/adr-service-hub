@@ -42,7 +42,7 @@ class PowerHistoryTests(unittest.TestCase):
         output=history_chart({'name':'Power','unit':'state','points_only':True,'points':[
             {'time':'2026-11-04T03:00:00+00:00','value':1},
             {'time':'2026-11-04T03:10:00+00:00','value':0}]})
-        self.assertEqual(output.count('class="chart-point"'),2)
+        self.assertEqual(output.count('class="chart-sample-bar"'),2)
         self.assertNotIn('class="chart-line"',output)
         self.assertIn('19:00',output);self.assertIn('PST',output)
         configure_site_timezone({'site_timezone':'America/New_York'})
@@ -63,3 +63,4 @@ class PowerHistoryTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+

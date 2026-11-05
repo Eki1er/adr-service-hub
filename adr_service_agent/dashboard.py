@@ -179,7 +179,7 @@ def cards(report, names=SYSTEMS, outlet_controls=""):
         short_stamp = stamp.split('·')[-1].strip()
         status = check.get('status', 'unverified') if check else 'pending'
         output += '<article id="system-' + esc(name.lower()) + '" data-check-status="' + esc(status) + '" class="system-card ' + style + (' sense-card' if name == 'Sense' else '') + '"><details class="system-tile"'+(' open' if name=='Internet' else '')+'><summary class="tile-summary" aria-label="' + esc(name + ' readings: ' + short_label) + '">'
-        output += '<div class="tile-icon-row"><span class="system-icon">' + icon(SYSTEM_ICONS[name]) + '</span><span class="status-dot" aria-hidden="true"></span></div><h3>' + esc(name) + '</h3><span class="badge" aria-label="' + esc(label) + '">' + short_label + '</span>'
+        output += '<div class="tile-icon-row"><span class="system-icon">' + icon(SYSTEM_ICONS[name]) + '</span></div><h3>' + esc(name) + '</h3><span class="badge" aria-label="' + esc(label) + '">' + short_label + '</span>'
         output += '<p class="tile-value">' + esc(headline) + '</p><span class="tile-footer"><span title="' + esc(stamp) + '">' + esc(short_stamp) + '</span>' + icon('chevron') + '</span></summary><div class="tile-body">'
         if check is None:
             output += '<p class="empty-state">Not checked yet.</p></div></details></article>'

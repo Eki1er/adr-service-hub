@@ -170,6 +170,22 @@ class TrialTests(unittest.TestCase):
         self.trial.current['targets'][0][0]='<script>bad</script>'
         self.assertNotIn('<script>bad',panel(self.trial,'test'))
 
+    def test_chart_has_local_time_axis_and_exact_sample_details_without_dots(self):
+        from datetime import datetime,timezone
+        from dashboard import configure_site_timezone
+        configure_site_timezone({'site_timezone':'America/New_York'})
+        self.now=datetime(2026,11,5,2,tzinfo=timezone.utc).timestamp()
+        self.trial.start()
+        self.now+=3600
+        self.sample()
+        markup=chart(self.trial.current,self.trial.samples,'latency_ms','Latency','ms')
+        self.assertEqual(markup.count('class="trial-time-tick"'),4)
+        self.assertIn('9:00 PM',markup)
+        self.assertIn('10:00 PM',markup)
+        self.assertIn('10:00:00 PM EST',markup)
+        self.assertIn('data-sample-detail=',markup)
+        self.assertNotIn('<circle',markup)
+
 
 class TrialWiringTests(unittest.TestCase):
     def setUp(self):

@@ -42,4 +42,36 @@ class TrendChartTests(unittest.TestCase):
         self.assertNotIn('class="chart-point"',output);self.assertNotIn('class="chart-line"',output)
         self.assertIn('unobserved time',output)
 
+    def test_speed_timeline_keeps_both_series_and_dated_times_without_point_markers(self):
+        output=network_history_charts([
+            self.series('Green speed test Download',[(0,900),(6,880),(12,920)]),
+            self.series('Green speed test Upload',[(0,800),(6,810),(12,830)])],'Green')
+        self.assertIn('speed-timeline',output)
+        self.assertIn('Both speed series',output)
+        self.assertIn('value="day" selected',output)
+        self.assertIn('7:00 AM',output)
+        self.assertIn('7:00 PM',output)
+        self.assertNotIn('<circle',output)
+        self.assertIn('data-sample-detail=',output)
+        self.assertIn('Download</span>',output)
+        self.assertIn('Upload</span>',output)
+
+    def test_single_test_timestamp_is_not_repeated_or_drawn_as_continuous_line(self):
+        output=network_history_charts([
+            self.series('Download',[(0,900)]),self.series('Upload',[(0,800)])],'Green')
+        self.assertEqual(output.count('class="timeline-time"'),3)  # one per period
+        self.assertNotIn('class="trend-line"',output)
+        self.assertIn('at least two recorded tests',output)
+
+    def test_empty_duplicate_placeholder_cannot_hide_recorded_upload(self):
+        output=network_history_charts([
+            self.series('Green speed test Download',[]),
+            self.series('Green speed test Upload',[]),
+            self.series('Green speed test Download',[(0,900),(6,910)]),
+            self.series('Green speed test Upload',[(0,800),(6,810)])],'Green')
+        self.assertIn('900 Mbit/s',output)
+        self.assertIn('800 Mbit/s',output)
+        self.assertEqual(output.count('data-trend-card'),1)
+
 if __name__=='__main__':unittest.main()
+

@@ -1,5 +1,5 @@
 name: ADR Service Agent
-version: 0.26.1
+version: 0.27.0
 slug: adr_service_agent
 description: Unified monitoring, network diagnostics, Ask ADR, and confirmed outlet
   controls.

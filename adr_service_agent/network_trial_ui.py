@@ -1,7 +1,9 @@
 """Ingress dashboard panel for recorded ICMP samples; renders no synthetic values."""
 import html
 import math
-from dashboard import display_time
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from dashboard import display_time, site_timezone_name
 from ui_icons import icon
 from network_trial import BASELINE, INTERVAL, stamp
 
@@ -39,12 +41,22 @@ def chart(current, samples, key, title, unit):
     if not valid:
         return output + '<p>Awaiting measured results.</p></section>'
     first, last = current['started'], max(sample['time'] for sample in samples)
-    span = max(last-first, INTERVAL)
+    span = max(last-first, 1)
     ceiling = 100 if unit == '%' else max(5, math.ceil(max(valid)/5)*5)
-    output += '<svg class="trend-chart" viewBox="0 0 600 250" role="img" aria-label="'+title+'"><title>'+title+'</title>'
+    try:zone=ZoneInfo(site_timezone_name())
+    except (ZoneInfoNotFoundError,ValueError):zone=ZoneInfo('UTC')
+    output += '<svg class="trend-chart" viewBox="0 0 600 260" role="group" tabindex="0" data-trial-chart aria-label="'+title+'; use left and right arrows for sample details"><title>'+title+'</title>'
     for index in range(5):
         yy = 40 + index*40
         output += f'<path d="M64 {yy}H576" class="chart-grid"/><text x="55" y="{yy+4}" text-anchor="end">{ceiling*(4-index)/4:g}</text>'
+    for index in range(4):
+        at=first+span*index/3
+        x=64+512*index/3
+        local=datetime.fromtimestamp(at,zone)
+        label=local.strftime('%I:%M %p').lstrip('0')
+        anchor='start' if index==0 else 'end' if index==3 else 'middle'
+        output+=f'<path d="M{x:.2f} 200v7" class="chart-grid"/><text class="trial-time-tick" x="{x:.2f}" y="233" text-anchor="{anchor}">'+esc(label)+'</text>'
+    output+='<text x="64" y="255" class="trial-time-zone">Time · '+esc(datetime.fromtimestamp(last,zone).strftime('%Z'))+'</text>'
     # Actual timestamps are used; unobserved periods and failures break paths.
     for index, target in enumerate(current['targets']):
         segments, active, previous = [], [], None
@@ -69,10 +81,20 @@ def chart(current, samples, key, title, unit):
                 path = ' '.join(('M' if j == 0 else 'L')+f'{x:.2f},{y:.2f}' for j, (x, y) in enumerate(segment))
                 output += '<path d="'+path+'" class="trend-line"/>'
         output += '</g>'
+    for sample in samples:
+        at=sample['time']
+        x=64+(at-first)/span*512
+        half=min(8,INTERVAL/span*256)
+        left,right=max(64,x-half),min(576,x+half)
+        details=datetime.fromtimestamp(at,zone).strftime('%b %d · %I:%M:%S %p %Z')
+        for index,target in enumerate(current['targets']):
+            reading=value(sample['rows'][index].get(key))
+            details+=' · '+str(target[0])+': '+(f'{reading:g} '+unit if reading is not None else 'Unavailable')
+        output+=f'<rect x="{left:.3f}" y="40" width="{max(right-left,0.01):.3f}" height="160" class="trial-sample-hit" data-sample-detail="'+esc(details)+'"><title>'+esc(details)+'</title></rect>'
     output += '</svg><div class="trend-legend">'
     for index, target in enumerate(current['targets']):
         output += '<span class="trend-color-'+str(index)+'"><i></i>'+esc(target[0])+'</span>'
-    output += '</div><p class="report-caption">'+esc(display_time(stamp(first)))+' — '+esc(display_time(stamp(last)))+' · '+unit+'</p></section>'
+    output += '</div><p class="trial-selected-sample" data-trial-detail data-trial-session="'+esc(current.get('id',''))+'" role="status">Tap the graph for the exact sample time and readings.</p><p class="report-caption">'+esc(display_time(stamp(first)))+' — '+esc(display_time(stamp(last)))+' · '+unit+'</p></section>'
     return output
 
 

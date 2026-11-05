@@ -1,4 +1,14 @@
-## Current release: 0.26.1
+## Current release: 0.27.0
+
+Charts use lines and bars without dot markers. CPU/memory readings use semicircular
+needle gauges, UniFi managed devices have compact inventory cards, and discovery
+results become labeled cards on phones. Internet speed history keeps Download and
+Upload together on one timeline with local date/time labels. Ping history has bottom
+time ticks and exact sample details on tap. These are display changes only.
+
+Wait until the active 24-hour ping trial finishes before installing this update.
+
+## Previous release: 0.26.1
 
 Device discovery columns now begin Manufacturer, IP address, Hostname, MAC address.
 

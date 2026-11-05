@@ -1,3 +1,13 @@
+## 0.27.0
+
+- Remove dot markers from history graphs and system tiles. Use connected trend lines, short bars for isolated readings, and existing discrete UPS observation bars.
+- Add semicircular needle gauges for measured CPU/memory percentages and compact UniFi managed-device cards using existing controller evidence.
+- Show discovery rows as labeled cards on mobile, retaining Manufacturer and IP address next to each other.
+- Keep Download and Upload together in one timeline with distinct colors, a shared Mbit/s scale, and dated local time labels. Default to 24 hours; week/all views remain available.
+- Add bottom local-time ticks to the ping trial and exact timestamp/readings on graph tap or keyboard navigation. Retain selections during display refresh.
+- Preserve unknown values, sampling gaps, collection schedules, retention, device controls and the 24-hour trial deadline. No live data is fabricated to fill charts.
+- Install after the running ping trial completes; updating restarts the app.
+
 ## 0.26.1
 
 - Move IP address directly after Manufacturer in discovery and observed-device tables.

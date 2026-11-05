@@ -59,6 +59,8 @@
     if(value)(matches[0]||document.getElementById('summary-filter-status'))?.scrollIntoView({behavior:'auto',block:'start'});
   }
   document.addEventListener('click',event=>{
+    const sample=event.target.closest('[data-sample-detail]');
+    if(sample){const detail=sample.closest('.trial-chart, .trend-card')?.querySelector('[data-trial-detail]');if(detail)detail.textContent=sample.dataset.sampleDetail;return;}
     const ask=event.target.closest('a[data-ask-shortcut]');
     if(ask){event.preventDefault();selectSummaryFilter('');document.getElementById('ask-adr')?.scrollIntoView({behavior:'auto',block:'start'});return;}
     const button=event.target.closest('button[data-summary-filter]');
@@ -66,6 +68,16 @@
     if(event.target.closest('#summary-filter-clear')){event.preventDefault();selectSummaryFilter('');}
   });
   document.addEventListener('change',event=>{if(event.target.matches('input[name="dashboard-view"]'))selectSummaryFilter('');});
+  document.addEventListener('keydown',event=>{
+    if(!event.target.matches('svg[data-trial-chart]')||!['ArrowLeft','ArrowRight'].includes(event.key))return;
+    const points=[...event.target.querySelectorAll('[data-sample-detail]')];if(!points.length)return;
+    event.preventDefault();
+    const old=Number(event.target.dataset.sampleIndex??points.length-1);
+    const index=Math.max(0,Math.min(points.length-1,old+(event.key==='ArrowRight'?1:-1)));
+    event.target.dataset.sampleIndex=String(index);
+    const detail=event.target.closest('.trial-chart')?.querySelector('[data-trial-detail]');
+    if(detail)detail.textContent=points[index].dataset.sampleDetail;
+  });
   if(summaryFilter){const all=document.getElementById('view-all');if(all)all.checked=true;}
   applySummaryFilter();
 
@@ -121,6 +133,7 @@
       return;
     }
     if (old.id === 'diagnostics' || old.id === 'ask-adr') return;
+    if(old.hasAttribute('data-trial-detail')&&old.dataset.trialSession===next.dataset.trialSession)return;
     if (old.isEqualNode(next)) return;
     if (old.tagName === 'FORM' && (touched.has(old) || old.contains(document.activeElement))) return;
     const protectedAttr = name => (name === 'open' && old.tagName === 'DETAILS') || (name === 'checked' && old.matches('input[name="dashboard-view"]'));
@@ -192,7 +205,8 @@
     const body=diag(id);if(!body)return;
     const serialized=JSON.stringify(rows);if(body.dataset.rows===serialized)return;
     const fragment=document.createDocumentFragment();
-    for(const row of rows){const tr=document.createElement('tr');for(const value of row){const td=document.createElement('td');
+    const labels=id==='diag-devices'?['Manufacturer','IP address','Hostname','MAC address','Device type','Identity source','Web interface']:[];
+    for(const row of rows){const tr=document.createElement('tr');for(const [column,value] of row.entries()){const td=document.createElement('td');if(labels[column])td.dataset.label=labels[column];
       if(value&&typeof value==='object'&&Array.isArray(value.web)){
         const ip=String(value.ip||''),parts=ip.split('.');
         const safe=parts.length===4&&parts.every(p=>/^(0|[1-9][0-9]{0,2})$/.test(p)&&Number(p)<=255)&&(parts[0]==='10'||(parts[0]==='172'&&Number(parts[1])>=16&&Number(parts[1])<=31)||(parts[0]==='192'&&parts[1]==='168'));

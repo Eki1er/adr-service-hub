@@ -1,3 +1,38 @@
+## Dashboard charts and device cards (0.27.0)
+
+Display changes use existing measurements only. The light ADR dashboard now has
+semicircular CPU/memory needle gauges where valid percentages are exposed, compact
+UniFi managed-device cards grouped into gateways/switches/APs, and labeled discovery
+cards on phones. System tiles use text badges rather than status dots. Managed
+states are explicitly controller-reported; missing uptime/CPU and offline causes
+are not invented. The discovery table and mobile cards retain Manufacturer, IP
+address, Hostname, MAC address in that order.
+
+History charts no longer draw sample dots. Consecutive recorded measurements use
+straight line segments; an isolated measurement is a short bar. Unknown values and
+long gaps still break lines. Existing UPS observation bars remain discrete and do
+not imply continuous confirmed utility or battery state.
+
+Download and Upload share a timeline and Mbit/s axis with a blue Download line and
+purple Upload line. Both remain visible; only the displayed period can change.
+The default period is 24 hours, with week/all retained. The horizontal axis shows
+local clock times and dates across midnight. A single test cannot form a trend;
+it stays a bar at its actual time until a second test exists. Empty placeholders
+cannot hide recorded throughput series. Green and UniFi histories remain separate.
+
+The ping trial has four bottom time ticks and a timezone label. Tap the graph to
+read an exact observation time (including seconds) and all target values, or focus
+the chart and use left/right arrows to inspect samples. Speed-history sample hits
+show the selected series value and test time. No smoothed peaks, data interpolation
+or synthetic measurements are added. Existing display refresh preserves selected
+sample details for the same trial.
+
+This revision does not start tests, change monitoring frequency, reset retention or
+extend a running trial. Installation still restarts the app and interrupts its
+trial: wait until the current 24-hour test completes before updating. Automated
+checks cover graph boundaries, no-point rendering, source separation and safe
+sample details; the revised layout still requires a live Green/mobile check.
+
 ## Device discovery identity and web links (0.26.0)
 
 Open Network → Diagnostics → Discover devices. Discovery remains scoped to one

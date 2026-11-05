@@ -7,7 +7,7 @@ from unittest.mock import Mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'adr_service_agent'))
 from sense import add_history
 from dashboard import grouped_cards
-from dashboard_visuals import gauge, history_chart, network_panels
+from dashboard_visuals import gauge, history_chart, network_panels, managed_device_cards
 from unifi import speedtest_readings
 
 
@@ -32,7 +32,7 @@ class HistoryVisualTests(unittest.TestCase):
         self.assertIn('no_attributes=1', url)
         self.assertNotIn('services/', url)
         output = history_chart(result['history']['series'][0])
-        self.assertEqual(output.count('class="chart-point"'), 2)
+        self.assertEqual(output.count('class="chart-sample-bar"'), 2)
         self.assertNotIn('class="chart-line"', output)
 
     def test_foreign_history_and_errors_do_not_leak_or_replace_current_values(self):
@@ -51,6 +51,8 @@ class HistoryVisualTests(unittest.TestCase):
         for value in (None, 'unknown', 'unavailable', float('nan'), -1, 101, True):
             self.assertEqual(gauge('CPU', value), '')
         self.assertIn('17.3%', gauge('CPU', 17.3))
+        self.assertIn('gauge-needle',gauge('CPU',17.3))
+        self.assertNotIn('<circle',gauge('CPU',17.3))
         self.assertIn('no history', history_chart({'name': '<script>x</script>', 'points': [], 'status': 'no history'}))
         self.assertNotIn('<script>', history_chart({'name': '<script>x</script>', 'points': []}))
         output = network_panels({})
@@ -64,6 +66,17 @@ class HistoryVisualTests(unittest.TestCase):
         self.assertIn('Sense', output)
         self.assertIn('view-network', output)
         self.assertNotIn('<script', output)
+        self.assertNotIn('class="status-dot"',output)
+
+    def test_managed_cards_use_reported_states_and_do_not_invent_cpu(self):
+        output=managed_device_cards({'devices':[
+            {'name':'Main <switch>','type':'usw','state':'online','uptime_seconds':172800,'ports':[{'link':'up'},{'link':'down'}]},
+            {'name':'AP','type':'uap'}]})
+        self.assertIn('Main &lt;switch&gt;',output)
+        self.assertIn('Up 2d',output)
+        self.assertIn('1/2 ports linked',output)
+        self.assertIn('Unverified',output)
+        self.assertNotIn('CPU',output)
 
     def test_speedtest_reads_only_existing_owned_enabled_sensors(self):
         entries = [{'entry_id': 'speed', 'domain': 'speedtestdotnet', 'state': 'loaded'},
@@ -81,4 +94,5 @@ class HistoryVisualTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
 
