@@ -40,7 +40,7 @@ class TrendChartTests(unittest.TestCase):
         self.assertNotIn('<svg class="history-chart"',output)
         self.assertIn('Switched to battery',output)
         self.assertNotIn('class="chart-point"',output);self.assertNotIn('class="chart-line"',output)
-        self.assertIn('Monitoring gap',output)
+        self.assertNotIn('Monitoring gap',output)
 
     def test_speed_timeline_keeps_both_series_and_dated_times_without_point_markers(self):
         output=network_history_charts([

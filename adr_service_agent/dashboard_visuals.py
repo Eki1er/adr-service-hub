@@ -395,7 +395,7 @@ def network_panels(checks, include_internet=True, include_access_points=True):
             output += '<p class="empty-state">Controller unavailable.</p>'
             output += '<p class="measurement-warning">' + esc(ruckus['controller_error']) + '</p>'
             if ruckus['controller_error'] == 'Inspect and approve this Ruckus controller certificate first.':
-                output += '<p>Open <a href="#connections">Connections</a>, inspect and approve the controller certificate, then select Read Access Points.</p>'
+                output += '<p>Open <a href="#connections">Settings</a>, inspect and approve the controller certificate, then select Read Access Points.</p>'
         if not aps:
             output += '<p class="empty-state">No access points collected.</p>'
         for ap in aps[:32]:

@@ -13,7 +13,7 @@ def collect(options,pin,request_fn=request):
     out=base('UniFi',stamp)
     try:
         config=settings(options)
-        if not isinstance(pin,dict):raise GatewayTrustError('Approve the UniFi gateway certificate in Connections first.')
+        if not isinstance(pin,dict):raise GatewayTrustError('Approve the UniFi gateway certificate in Settings first.')
         out['target_id']=target(config,pin)
     except GatewayError as exc:
         out['limitations'].append(str(exc));return out
@@ -26,7 +26,7 @@ def collect(options,pin,request_fn=request):
             out['limitations'].append(str(exc))
             break
         except GatewayTrustError:
-            out['limitations'].append('UniFi network reads stopped: approve the current gateway certificate in Connections. API key was not sent.')
+            out['limitations'].append('UniFi network reads stopped: approve the current gateway certificate in Settings. API key was not sent.')
             break
         except (GatewayError,ValueError,TypeError,AttributeError):
             # Preserve the independent successful read. Never include a raw

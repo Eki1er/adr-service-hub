@@ -1,4 +1,11 @@
-## Current release: 0.28.0
+## Current release: 0.28.1
+
+Rename Connections to Settings throughout the dashboard. Clean up navigation
+icons and align their size, spacing, and mobile labels. Power history shows only
+power issues and recovery events; remove routine monitoring entries and footer text.
+Network tools appear only on the Network tab.
+
+## Previous release: 0.28.0
 
 Device discovery now supports search and sorting, with smaller mobile cards.
 Tap tables, graphs, and gauges for an enlarged view with zoom and Close.

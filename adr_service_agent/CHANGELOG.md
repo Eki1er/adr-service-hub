@@ -1,3 +1,12 @@
+## 0.28.1
+
+- Display Network tools exclusively on the Network tab.
+
+- Show only power issues and recovery events in UPS history. Remove monitoring activity and the history disclaimer.
+
+- Rename Connections to Settings in navigation, setup, and guidance.
+- Clean up the network and settings icons and standardize navigation icon sizing.
+
 ## 0.28.0
 
 - Search devices by manufacturer, hostname, MAC, IP, or device type. Sort by numeric IP, manufacturer, hostname, or MAC; keep unknown identities last.

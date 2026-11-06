@@ -157,7 +157,7 @@ def assess(name, snapshot):
         if snapshot.get('controller_error'):
             service.append('Direct access point statistics could not be read; per-access-point status and counts remain unverified.')
             if snapshot.get('controller_error') == 'Inspect and approve this Ruckus controller certificate first.':
-                limits.append('Connection setup incomplete: inspect and approve the Ruckus controller certificate under Connections, then read access points.')
+                limits.append('Connection setup incomplete: inspect and approve the Ruckus controller certificate under Settings, then read access points.')
             else:
                 limits.append(str(snapshot['controller_error'])[:600])
         controller = snapshot.get('controller')

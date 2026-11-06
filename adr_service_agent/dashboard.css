@@ -148,3 +148,10 @@ table,.gauge svg{cursor:zoom-in}table:focus-visible{outline:2px solid #007db5;ou
 @media(max-width:700px){.device-list-controls{grid-template-columns:minmax(0,1fr) 125px;gap:8px}.device-list-controls input,.device-list-controls select{font-size:12px}.discovered-devices tr{gap:8px 12px;padding:12px;border-radius:9px;margin:8px 0;border-left-width:3px}.discovered-devices td{font-size:12px;line-height:1.35}.discovered-devices td::before{font-size:9px;letter-spacing:0;text-transform:none;margin-bottom:2px}.discovered-devices td:nth-child(2),.discovered-devices td:nth-child(4){font-variant-numeric:tabular-nums;font-size:11px}.discovered-devices td a{font-size:11px;margin:0 10px 0 0;line-height:1.8}}
 
 @media(max-width:700px){.device-list-controls input,.device-list-controls select{font-size:16px}}
+
+/* Consistent navigation icon boxes and readable mobile labels. */
+.sidebar nav svg,.group-tabs svg{display:block;width:22px;height:22px;flex:0 0 22px;stroke-width:1.7}
+@media(max-width:700px){main+.group-tabs{align-items:start;padding-top:8px;padding-bottom:calc(8px + env(safe-area-inset-bottom))}main+.group-tabs label{justify-content:flex-start;align-items:center;gap:5px;min-width:0;min-height:44px;padding:4px 0}main+.group-tabs span{font-size:9px;line-height:1.2}}
+
+/* Network tools belong exclusively to the Network view. */
+body:not(:has(#view-network:checked)) .network-actions{display:none!important}

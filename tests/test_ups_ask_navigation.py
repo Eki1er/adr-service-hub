@@ -26,10 +26,21 @@ class UpsAskTests(unittest.TestCase):
             'listener_connected':True,'last_state':{'reported_at':'2026-11-04T02:46:51+00:00'},
             'events':[{'kind':'baseline','state':'line_power','reported_at':'2026-11-04T02:46:51+00:00','received_at':'2026-11-04T03:05:27+00:00'}]})
         self.assertIn('Utility power reported',output)
-        self.assertIn('this is not an outage or restoration',output)
+        self.assertNotIn('Monitoring baseline',output)
+        self.assertNotIn('Monitoring activity',output)
+        self.assertNotIn('Monitoring gaps and brief events',output)
+        self.assertIn('No power issues recorded.',output)
         self.assertIn('9:46 PM EST',output)
-        self.assertIn('10:05 PM EST',output)
+        self.assertNotIn('10:05 PM EST',output)
         self.assertNotIn('UTC',output)
+
+    def test_monitoring_activity_does_not_hide_power_events(self):
+        events = [{'kind':'on_battery','reported_at':'2026-11-04T03:10:00+00:00'}]
+        events += [{'kind':kind} for _ in range(20) for kind in ('baseline','monitoring_gap','status_unverified','communications_restored')]
+        output = ups_panel({'enabled':True,'events':events})
+        self.assertIn('Switched to battery',output)
+        for text in ('Monitoring gap','Monitoring baseline','Monitoring activity','Communication restored','Event time unreported'):
+            self.assertNotIn(text,output)
 
     def test_disconnect_never_displays_old_state_as_current(self):
         output=ups_panel({'enabled':True,'status':'unverified','current':'line_power',
@@ -37,7 +48,7 @@ class UpsAskTests(unittest.TestCase):
         self.assertIn('Power status unverified',output)
         self.assertNotIn('Utility power reported',output)
         self.assertIn('&lt;script&gt;',output)
-        self.assertIn('No UPS events recorded',output)
+        self.assertIn('No power issues recorded',output)
 
     def test_missing_source_time_not_invented_and_history_bounded(self):
         events=[{'kind':'on_battery','received_at':'2026-11-04T03:10:00+00:00'}]*30

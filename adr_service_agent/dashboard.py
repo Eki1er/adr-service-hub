@@ -247,15 +247,12 @@ def ups_panel(status):
     output += '</div><p class="ups-monitor-note">'+('Monitor connected · Last report shown above.' if status.get('listener_connected') else 'Monitor disconnected · Current power status is unverified.')+'</p>'
     if status.get('error'):
         output += '<p class="measurement-warning">'+esc(status['error'])+'</p>'
-    events = status.get('events', [])[-12:]
-    significant = [item for item in events if item.get('kind') not in ('baseline', 'communications_restored')]
-    baseline = [item for item in events if item.get('kind') in ('baseline', 'communications_restored')]
+    power_kinds = {'on_battery', 'line_power_restored', 'low_battery', 'replace_battery', 'forced_shutdown', 'shutdown'}
+    significant = [item for item in status.get('events', []) if item.get('kind') in power_kinds][-12:]
     def event_row(item):
         kind = item.get('kind', '')
         tone = 'battery' if kind in ('on_battery','low_battery','replace_battery','forced_shutdown','shutdown') else 'utility' if kind == 'line_power_restored' else 'unknown'
         row = '<li class="ups-event ups-event-'+tone+'"><div><strong>'+esc(kinds.get(kind, 'UPS observation'))+'</strong>'
-        if kind == 'baseline':
-            row += '<span>'+esc(labels.get(item.get('state'), labels['unverified']))+'; this is not an outage or restoration.</span>'
         if item.get('reported_at'):
             row += '<span>Reported '+esc(display_time(item['reported_at']))+'</span>'
         else:
@@ -264,13 +261,9 @@ def ups_panel(status):
     output += '<div class="ups-event-heading"><h4>Power events</h4><span>Latest recorded</span></div>'
     if significant:
         output += '<ol class="ups-event-list">'+''.join(event_row(item) for item in reversed(significant))+'</ol>'
-    elif not events:
-        output += '<p class="ups-empty">No UPS events recorded yet.</p>'
     else:
-        output += '<p class="ups-empty">No battery transfers or power restorations recorded in the displayed history.</p>'
-    if baseline:
-        output += '<details class="ups-events"><summary>Monitoring activity · '+str(len(baseline))+'</summary><ol class="ups-event-list">'+''.join(event_row(item) for item in reversed(baseline))+'</ol></details>'
-    output += '<p class="report-caption">Monitoring gaps and brief events can be missed. Times are reported events, not continuous power measurements.</p></section>'
+        output += '<p class="ups-empty">No power issues recorded.</p>'
+    output += '</section>'
     return output
 
 
@@ -278,7 +271,7 @@ def ups_panel(status):
 def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None, monitoring_markup=""):
     checks = {c['system']: c for c in (report or {}).get('checks', [])}
     output = '<div class="dashboard-groups" id="systems">'
-    for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS] + [('connections', 'Connections')]:
+    for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS] + [('connections', 'Settings')]:
         output += '<input class="view-radio" type="radio" name="dashboard-view" id="view-' + key + '"' + (' checked' if key == 'all' else '') + ' aria-label="' + title + '">'
     output += '<div class="category-launcher" aria-label="System categories">'
     for key, title, names in GROUPS:
@@ -288,7 +281,7 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=
         output += '<label class="category-tile category-' + key + '" for="view-' + key + '"><span>' + icon(key if key != 'av' else 'av') + '</span><strong>' + ('AV/Automation' if key == 'av' else title) + '</strong><small>' + status + '</small></label>'
     output += '<a class="category-tile ask-tile" href="#ask-adr" data-ask-shortcut><span>'+icon('ask')+'</span><strong>Ask ADR</strong><small>Speak or ask about this site</small></a>'
     output += '</div><nav class="group-tabs" aria-label="System views">'
-    for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS] + [('connections', 'Connections')]:
+    for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS] + [('connections', 'Settings')]:
         output += '<label for="view-' + key + '" aria-label="' + title + '">' + icon('home' if key == 'all' else 'settings' if key == 'connections' else key) + '<span>' + ('AV/Automation' if key == 'av' else title) + '</span></label>'
     output += '</nav>'
     for key, title, names in GROUPS:

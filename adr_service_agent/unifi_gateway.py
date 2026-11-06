@@ -58,7 +58,7 @@ def request(config, pin, method, operation):
     if operation not in routes or method != routes[operation][0]:
         raise GatewayError('Unsupported gateway operation.')
     if not isinstance(pin,dict) or pin.get('host') != config['host'] or pin.get('port') != config['port'] or not re.fullmatch(r'[a-f0-9]{64}', str(pin.get('sha256',''))):
-        raise GatewayTrustError('Inspect and approve the UniFi gateway certificate in Connections first.')
+        raise GatewayTrustError('Inspect and approve the UniFi gateway certificate in Settings first.')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE

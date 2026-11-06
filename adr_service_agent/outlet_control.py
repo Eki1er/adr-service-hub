@@ -12,7 +12,7 @@ from wattbox import ProtocolError
 def identity(pilot):
     pilot.ready()
     path=pilot.data/'known_hosts'
-    if not path.exists():raise ProtocolError('Approve the WattBox SSH identity in Connections first.')
+    if not path.exists():raise ProtocolError('Approve the WattBox SSH identity in Settings first.')
     return hashlib.sha256(json.dumps([pilot.config['wattbox_host'],pilot.config['ssh_port'],path.read_text()]).encode()).hexdigest()
 
 
