@@ -1,4 +1,22 @@
-## Current release: 0.28.3
+## Current release: 0.29.0
+
+Overview is a compact status list across power, networking, audio, and automation,
+with detected issues first. Tap a row to open the relevant system.
+
+Settings includes an Issue log grouped by date. Issues retain first/last detection
+and recovery times for 90 days, survive updates/restarts, and update existing open
+entries rather than repeat the same alert. New successful evidence is required
+before an issue is marked recovered. Logging starts with available measurements;
+missing data never becomes a power failure or an offline device.
+
+High-ping summaries count recorded samples today above 10 ms to the gateway or
+100 ms to internet targets. Speed alerts compare the latest test with at least
+three prior tests and flag a drop of more than 20%. Sense line-voltage alerts
+use 108–132 V for L1/L2 readings; near-zero on one line while the other is in range
+is labeled possible phase loss. These are sampled measurements, not a transient
+power-quality recorder. Device-reported UPS events retain their source timestamps.
+
+## Previous release: 0.28.3
 
 Show the CP4-R processor readings inside the Crestron tile, with no separate
 processor tile. Processor findings remain reflected in the Crestron status.

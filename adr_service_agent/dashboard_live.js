@@ -59,6 +59,15 @@
     if(value)(matches[0]||document.getElementById('summary-filter-status'))?.scrollIntoView({behavior:'auto',block:'start'});
   }
   document.addEventListener('click',event=>{
+    const statusRow=event.target.closest('[data-overview-view]');
+    if(statusRow){
+      event.preventDefault();selectSummaryFilter('');
+      const input=document.getElementById('view-'+statusRow.dataset.overviewView);
+      if(input){input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));}
+      const target=document.getElementById(statusRow.dataset.overviewTarget);
+      const tile=target?.querySelector('details.system-tile');if(tile)tile.open=true;
+      target?.scrollIntoView({behavior:'auto',block:'start'});return;
+    }
     const sample=event.target.closest('[data-sample-detail]');
     if(sample){const detail=sample.closest('.trial-chart, .trend-card')?.querySelector('[data-trial-detail]');if(detail)detail.textContent=sample.dataset.sampleDetail;return;}
     const ask=event.target.closest('a[data-ask-shortcut]');

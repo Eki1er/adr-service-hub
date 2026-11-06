@@ -1,3 +1,10 @@
+## 0.29.0
+
+- Replace Overview category launchers and report counts with an issue-first status list across all monitored systems. Open detailed system views from each row.
+- Summarize sampled high ping/packet loss today, speed deviations from prior tests, device availability, processor readiness, UPS events, and measured line-voltage anomalies.
+- Add a persistent 90-day Issue log under Settings, grouped by date with first/last detection and recovery times. Deduplicate repeated checks and retain open issues when new evidence is missing.
+- Keep details and automatic-check schedules in their existing category views.
+
 ## 0.28.3
 
 - Combine CP4-R processor readings with Crestron in one dashboard tile, preserving processor details and findings.

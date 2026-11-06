@@ -287,11 +287,12 @@ def ups_panel(status):
 
 
 
-def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None, monitoring_markup="", saved_green_history=None):
+def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None, monitoring_markup="", saved_green_history=None, overview_markup=""):
     checks = {c['system']: c for c in (report or {}).get('checks', [])}
     output = '<div class="dashboard-groups" id="systems">'
     for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS] + [('connections', 'Settings')]:
         output += '<input class="view-radio" type="radio" name="dashboard-view" id="view-' + key + '"' + (' checked' if key == 'all' else '') + ' aria-label="' + title + '">'
+    output += overview_markup
     output += '<div class="category-launcher" aria-label="System categories">'
     for key, title, names in GROUPS:
         review = sum(checks.get(name, {}).get('status') == 'review' for name in names)

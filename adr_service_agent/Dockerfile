@@ -9,7 +9,7 @@ COPY green_network.py ./
 COPY ookla_addon.py ./
 COPY power_history.py ./
 COPY network_trial.py network_trial_ui.py ./
-COPY device_identity.py ./
+COPY device_identity.py issue_overview.py ./
 CMD ["python", "-u", "agent.py"]
 
 

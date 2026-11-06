@@ -157,3 +157,13 @@ table,.gauge svg{cursor:zoom-in}table:focus-visible{outline:2px solid #007db5;ou
 body:not(:has(#view-network:checked)) .network-actions{display:none!important}
 
 .crestron-processor{margin-top:18px;padding-top:18px;border-top:1px solid #e8e9ee}.crestron-processor>h4{margin:0 0 14px;font-size:16px;font-weight:600}
+
+/* Overview is an issue-first snapshot; detailed readings stay in category views. */
+.status-overview{display:none;padding:0;margin:18px 0}
+#view-all:checked~.status-overview{display:block}
+body:has(#view-all:checked) .category-launcher,body:has(#view-all:checked) .summary-strip,body:has(#view-all:checked) .monitoring-panel{display:none!important}
+.status-overview h2{font-size:19px;margin:0 0 12px}.status-overview ul{list-style:none;margin:0;padding:0}
+.snapshot-row{display:grid;grid-template-columns:110px 1fr;gap:4px 12px;text-align:left;background:#fff;color:#172c3d;border:1px solid #e3e8ed;border-left:3px solid #8fa89b;border-radius:9px;padding:12px 14px;margin:7px 0;width:100%;font:inherit;cursor:pointer}
+.snapshot-system{font-size:12px;font-weight:600}.snapshot-message{font-size:13px;line-height:1.4}.snapshot-row small{grid-column:2;font-size:10px;color:#71808a}.snapshot-issue{border-left-color:#be6a36;background:#fffaf5}.snapshot-unknown{border-left-color:#a6b0b9}.snapshot-row:hover{border-color:#adbac5}.snapshot-row:focus-visible{outline:2px solid #007db5;outline-offset:2px}
+#issue-log{padding:0 0 22px;border-bottom:1px solid #e3e8ed;margin-bottom:22px}.issue-day{padding:12px 0;border-top:1px solid #e3e8ed}.issue-day>summary{font-size:14px}.issue-day ul{list-style:none;margin:10px 0 0;padding:0}.issue-day li{padding:12px;border-left:3px solid #a5b3bd;background:#f5f7f9;border-radius:6px;margin:7px 0}.issue-day strong{display:block;font-size:13px}.issue-day span{display:block;font-size:11px;color:#5e7280;margin-top:5px}.issue-day small{display:block;font-size:11px;margin-top:5px;color:#617383}
+@media(max-width:700px){.snapshot-row{grid-template-columns:85px 1fr;padding:11px;gap:4px 9px}.snapshot-message{font-size:12px}.snapshot-system{font-size:11px}}

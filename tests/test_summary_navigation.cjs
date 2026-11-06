@@ -5,11 +5,12 @@ const cards=['verified','review','unverified'].map(status=>{const c=node();c.dat
 const groups=cards.map(card=>{const g=node();g.querySelector=()=>card.classList.contains('summary-filtered-out')?null:card;return g;});
 const buttons=['verified','review','unverified'].map(status=>{const b=node();b.dataset.summaryFilter=status;return b;});
 const note=node(),clear=node(),all={checked:false};
+const networkView={checked:false,dispatchEvent(e){for(const fn of handlers.change)fn({target:{checked:true,id:'view-network',matches:()=>true}});}};
 const main=node();main.querySelectorAll=s=>s==='[data-check-status]'?cards:s==='.system-group'?groups:buttons;
 const askPanel={scrolled:false,scrollIntoView(){this.scrolled=true;}};
-const document={forms:[],hidden:false,querySelector:s=>s==='main'?main:null,querySelectorAll:()=>[],getElementById:id=>({'ask-adr':askPanel,'view-all':all,'summary-filter-status':note,'summary-filter-clear':clear}[id]),addEventListener:(name,fn)=>(handlers[name]??=[]).push(fn)};
+const document={forms:[],hidden:false,querySelector:s=>s==='main'?main:null,querySelectorAll:()=>[],getElementById:id=>({'ask-adr':askPanel,'view-all':all,'view-network':networkView,'system-unifi':cards[1],'summary-filter-status':note,'summary-filter-clear':clear}[id]),addEventListener:(name,fn)=>(handlers[name]??=[]).push(fn)};
 const window={};window.parent=window;
-vm.runInNewContext(fs.readFileSync('adr_service_agent/dashboard_live.js','utf8'),{document,window,location:{pathname:'/test'},sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},addEventListener(){},matchMedia:()=>({matches:false}),setTimeout(){},setInterval(){},Intl,Date,fetch(){calls++;}});
+vm.runInNewContext(fs.readFileSync('adr_service_agent/dashboard_live.js','utf8'),{document,window,location:{pathname:'/test'},sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},addEventListener(){},matchMedia:()=>({matches:false}),setTimeout(){},setInterval(){},Event:class{constructor(type,options){this.type=type;}},Intl,Date,fetch(){calls++;}});
 function click(button,selector='button[data-summary-filter]'){for(const fn of handlers.click)fn({preventDefault(){},target:{closest:s=>s===selector?button:null}});}
 click(buttons[1]);assert.equal(all.checked,true);assert.equal(main.dataset.summaryFilter,'review');
 assert.equal(cards[0].classList.contains('summary-filtered-out'),true);assert.equal(cards[1].details.every(d=>d.open),true);assert.equal(cards[1].scrolled,true);assert.equal(groups[2].classList.contains('summary-filtered-out'),true);assert.equal(buttons[1].attrs['aria-pressed'],'true');assert.match(note.textContent,/1 to review/);
@@ -18,4 +19,7 @@ click(buttons[2]);assert.equal(cards[2].scrolled,true);
 for(const fn of handlers.change)fn({target:{checked:true,id:'view-network',matches:()=>true}});
 assert.equal(main.dataset.summaryFilter,undefined);assert.equal(calls,0);
 click(buttons[1]);all.checked=false;click({},'a[data-ask-shortcut]');assert.equal(askPanel.scrolled,true);assert.equal(all.checked,false);assert.equal(main.dataset.summaryFilter,undefined);assert.equal(calls,0);
+cards[1].details[0].open=false;
+click({dataset:{overviewView:'network',overviewTarget:'system-unifi'}},'[data-overview-view]');
+assert.equal(networkView.checked,true);assert.equal(cards[1].details[0].open,true);assert.equal(cards[1].scrolled,true);assert.equal(calls,0);
 console.log('Summary navigation passed: matching systems, expanded findings, clear filter, category navigation, no device/network actions.');
