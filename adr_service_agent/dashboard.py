@@ -168,12 +168,52 @@ def tile_value(name, snapshot, lines):
     return lines[0] if lines else 'No readings'
 
 
+def check_body(name, check, outlet_controls=""):
+    esc = lambda x: html.escape(str(x), quote=True)
+    output = ''
+    snapshot = (check or {}).get('snapshot') or {}
+    lines = key_readings(name, snapshot) if check else []
+    stamp = display_time(check.get('post_action_verified_at') or check.get('completed_at')) if check else ''
+    if check is None:
+        return '<p class="empty-state">Not checked yet.</p>'
+    output += visuals(name, snapshot, lines)
+    if name == 'WattBox': output += outlet_controls
+    if lines:
+        output += '<div class="metrics">'
+        for index, line in enumerate(lines):
+            output += '<p class="metric' + (' primary-metric' if index == 0 else '') + '">' + esc(line) + '</p>'
+        output += '</div>'
+    output += '<p class="collected">Updated ' + esc(stamp) + '</p><div class="card-details">'
+    groups = [('Service findings', check.get('service_findings', [])), ('Data limitations', check.get('data_limitations', [])),
+        ('Observations', check.get('observations', []) + check.get('comparisons', []))]
+    for title, notes in groups:
+        if notes:
+            output += '<details><summary>' + title + ' <span class="detail-count">' + str(len(notes)) + '</span></summary>'
+            for line in notes: output += '<p>' + esc(line) + '</p>'
+            output += '</details>'
+    history = check.get('historical_observations', [])
+    if history:
+        output += '<div class="history-note"><strong>Historical observations</strong>'
+        for item in history:
+            output += '<p>' + esc(display_time(item.get('recorded_at'))) + ' · ' + esc(item.get('subject', '')) + ': ' + esc(item.get('note', '')) + '</p>'
+        output += '</div>'
+    return output + '</div>'
+
+
 def cards(report, names=SYSTEMS, outlet_controls=""):
     esc = lambda x: html.escape(str(x), quote=True)
     checks = {c['system']: c for c in (report or {}).get('checks', [])}
     output = '<div class="system-grid">'
     for name in names:
+        if name == 'CP4-R' and 'Crestron' in names:
+            continue
         check = checks.get(name)
+        if name == 'Crestron' and checks.get('CP4-R'):
+            processor = checks['CP4-R']
+            check = dict(check or {'snapshot': {}, 'completed_at':processor.get('completed_at')})
+            statuses = [item.get('status','unverified') for item in (checks.get('Crestron'),processor) if item]
+            check['status'] = next((status for status in ('review','unverified','verified') if status in statuses),'unverified')
+            check['service_findings'] = (check.get('service_findings') or []) + (processor.get('service_findings') or [])
         if check is None:
             label, style = 'Not checked', 'pending'
         elif check.get('service_findings'):
@@ -194,31 +234,10 @@ def cards(report, names=SYSTEMS, outlet_controls=""):
         output += '<article id="system-' + esc(name.lower()) + '" data-check-status="' + esc(status) + '" class="system-card ' + style + (' sense-card' if name == 'Sense' else '') + '"><details class="system-tile"'+(' open' if name=='Internet' else '')+'><summary class="tile-summary" aria-label="' + esc(name + ' readings: ' + short_label) + '">'
         output += '<div class="tile-icon-row"><span class="system-icon">' + icon(SYSTEM_ICONS[name]) + '</span></div><h3>' + esc(name) + '</h3><span class="badge" aria-label="' + esc(label) + '">' + short_label + '</span>'
         output += '<p class="tile-value">' + esc(headline) + '</p><span class="tile-footer"><span title="' + esc(stamp) + '">' + esc(short_stamp) + '</span>' + icon('chevron') + '</span></summary><div class="tile-body">'
-        if check is None:
-            output += '<p class="empty-state">Not checked yet.</p></div></details></article>'
-            continue
-        output += visuals(name, snapshot, lines)
-        if name == 'WattBox': output += outlet_controls
-        if lines:
-            output += '<div class="metrics">'
-            for index, line in enumerate(lines):
-                output += '<p class="metric' + (' primary-metric' if index == 0 else '') + '">' + esc(line) + '</p>'
-            output += '</div>'
-        output += '<p class="collected">Updated ' + esc(stamp) + '</p><div class="card-details">'
-        groups = [('Service findings', check.get('service_findings', [])), ('Data limitations', check.get('data_limitations', [])),
-            ('Observations', check.get('observations', []) + check.get('comparisons', []))]
-        for title, notes in groups:
-            if notes:
-                output += '<details><summary>' + title + ' <span class="detail-count">' + str(len(notes)) + '</span></summary>'
-                for line in notes: output += '<p>' + esc(line) + '</p>'
-                output += '</details>'
-        history = check.get('historical_observations', [])
-        if history:
-            output += '<div class="history-note"><strong>Historical observations</strong>'
-            for item in history:
-                output += '<p>' + esc(display_time(item.get('recorded_at'))) + ' · ' + esc(item.get('subject', '')) + ': ' + esc(item.get('note', '')) + '</p>'
-            output += '</div>'
-        output += '</div></div></details></article>'
+        output += check_body(name, checks.get(name), outlet_controls)
+        if name == 'Crestron':
+            output += '<section class="crestron-processor"><h4>CP4-R processor</h4>' + check_body('CP4-R', checks.get('CP4-R')) + '</section>'
+        output += '</div></details></article>'
     return output + '</div>'
 
 

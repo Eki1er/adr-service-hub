@@ -155,3 +155,5 @@ table,.gauge svg{cursor:zoom-in}table:focus-visible{outline:2px solid #007db5;ou
 
 /* Network tools belong exclusively to the Network view. */
 body:not(:has(#view-network:checked)) .network-actions{display:none!important}
+
+.crestron-processor{margin-top:18px;padding-top:18px;border-top:1px solid #e8e9ee}.crestron-processor>h4{margin:0 0 14px;font-size:16px;font-weight:600}

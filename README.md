@@ -1,4 +1,9 @@
-## Current release: 0.28.2
+## Current release: 0.28.3
+
+Show the CP4-R processor readings inside the Crestron tile, with no separate
+processor tile. Processor findings remain reflected in the Crestron status.
+
+## Previous release: 0.28.2
 
 Gateway, Cloudflare, and Google each have separate latency and packet-loss graphs,
 with independent enlargement and sample inspection. Saved internet speed graphs

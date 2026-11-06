@@ -1,3 +1,7 @@
+## 0.28.3
+
+- Combine CP4-R processor readings with Crestron in one dashboard tile, preserving processor details and findings.
+
 ## 0.28.2
 
 - Display saved internet speed history immediately after updates/restarts without requiring a live service report.

@@ -61,7 +61,7 @@ class HistoryVisualTests(unittest.TestCase):
 
     def test_grouped_dashboard_has_ten_systems_and_power_sense(self):
         output = grouped_cards(None)
-        self.assertEqual(output.count('<article'), 11)
+        self.assertEqual(output.count('<article'), 10)
         self.assertIn('group-power', output)
         self.assertIn('Sense', output)
         self.assertIn('view-network', output)

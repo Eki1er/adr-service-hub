@@ -28,6 +28,20 @@ class DetailsParser(HTMLParser):
 
 
 class DashboardTests(unittest.TestCase):
+    def test_processor_shares_crestron_tile_and_preserves_findings(self):
+        report={'checks':[
+            {'system':'Crestron','status':'verified','snapshot':{},'completed_at':'2026-11-06T03:00:00+00:00'},
+            {'system':'CP4-R','status':'review','snapshot':{'readings':[{'command':'SYSTEMREADY','response':'SystemReady: True','status':'response received'},{'command':'RAMFREE','response':'25 percent of memory in use','status':'response received'}]},'service_findings':['Processor needs review'],'completed_at':'2026-11-06T03:01:00+00:00'}]}
+        output=cards(report,('Crestron','CP4-R'))
+        self.assertEqual(output.count('<article'),1)
+        self.assertIn('id="system-crestron" data-check-status="review"',output)
+        self.assertNotIn('id="system-cp4-r"',output)
+        self.assertIn('CP4-R processor',output)
+        self.assertIn('Processor needs review',output)
+        self.assertIn('System ready:',output)
+        self.assertIn('Memory',output)
+
+
     def test_invalid_volume_and_unsupported_cpu_are_limitations_not_service_faults(self):
         result = assess('Control4', {'entry': {'state': 'loaded'}, 'readings': [
             {'name': 'TV', 'state': 'idle', 'attributes': {'volume_level': -0.01}}]})
@@ -97,7 +111,7 @@ class DashboardTests(unittest.TestCase):
                 rendered = page(pilot)
                 parser = DetailsParser(); parser.feed(rendered)
                 self.assertEqual(parser.depth, 0)
-                self.assertEqual(parser.articles, len(SYSTEMS) + 1)  # Opt-in Network Monitoring card.
+                self.assertEqual(parser.articles, len(SYSTEMS))  # CP4-R is inside Crestron; monitoring adds one card.
             report, _ = run_checks([('Sonos', 'a', lambda: {'players': [{'name': '<script>bad</script>', 'state': 'idle'}]})], {})
             rendered = cards(report)
             self.assertNotIn('<script>', rendered)
