@@ -133,5 +133,19 @@ class GreenTests(unittest.TestCase):
             self.assertIsNone(pilot.green_speed)
 
 
+class SavedSpeedGraphTests(unittest.TestCase):
+    def test_saved_speed_graph_renders_after_restart_without_live_checks(self):
+        from agent import Pilot, page
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); options=root/'options.json'; options.write_text('{}')
+            series={'name':'Green speed test Download','unit':'Mbps','points':[{'time':'2026-11-06T03:00:00+00:00','value':812}]}
+            (root/'green_network_history.json').write_text(json.dumps({'green:cloudflare:':{'download':series}}))
+            pilot=Pilot(root,options)
+            self.assertIsNone(pilot.service_report)
+            output=page(pilot)
+            self.assertIn('Saved internet speed history',output)
+            self.assertIn('812',output)
+            self.assertIsNone(pilot.service_report)
+
 if __name__=='__main__':unittest.main()
 

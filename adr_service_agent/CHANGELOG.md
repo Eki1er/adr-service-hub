@@ -1,3 +1,9 @@
+## 0.28.2
+
+- Display saved internet speed history immediately after updates/restarts without requiring a live service report.
+
+- Show separate latency and packet-loss graphs for each monitoring target so overlapping readings remain visible.
+
 ## 0.28.1
 
 - Display Network tools exclusively on the Network tab.

@@ -4,7 +4,7 @@ import html
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from dashboard_visuals import visuals, network_panels, history_chart
+from dashboard_visuals import visuals, network_panels, history_chart, network_history_charts
 from network_health import summary as network_summary
 from bluesound import zone_rows as bluesound_zones
 
@@ -268,7 +268,7 @@ def ups_panel(status):
 
 
 
-def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None, monitoring_markup=""):
+def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=None, monitoring_markup="", saved_green_history=None):
     checks = {c['system']: c for c in (report or {}).get('checks', [])}
     output = '<div class="dashboard-groups" id="systems">'
     for key, title in [('all', 'Overview')] + [(k, t) for k, t, _ in GROUPS] + [('connections', 'Settings')]:
@@ -291,6 +291,9 @@ def grouped_cards(report, outlet_controls="", diagnostics_markup="", ups_status=
             output += '<div class="system-grid">'+monitoring_markup+'</div>' if monitoring_markup else ''
             output += cards(report,('Internet',)).replace('class="system-grid"','class="system-grid internet-feature"',1)
             output += network_panels(checks, include_internet=False)
+            live_history = ((checks.get('Internet') or {}).get('snapshot') or {}).get('network_history')
+            if saved_green_history and not live_history:
+                output += '<section class="saved-speed-history"><h3>Saved internet speed history</h3>' + network_history_charts(saved_green_history, 'Green') + '</section>'
             diagnostic_check=checks.get('Network diagnostics')
             if diagnostic_check:
                 status=html.escape(str(diagnostic_check.get('status','unverified')),quote=True)

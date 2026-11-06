@@ -1130,7 +1130,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     elif (pilot.monitor_active or pilot.network_trial.running) and not pilot.power_pending and not pilot.gateway_candidate and not confirmation and not candidate and not pilot.controller_candidate and not pilot.monitoring_busy():
         text += '<meta name="adr-refresh" content="60">'
     text += '<meta name="adr-site-timezone" content="'+esc(site_timezone_name())+'">'
-    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr" data-ask-shortcut>{icon("ask")}<span>Ask ADR</span></a><a href="#history">History</a><label for="view-connections">{icon("settings")}<span>Settings</span></label></nav><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.28.1</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
+    text += f'<title>ADR Service Agent</title><style>{CSS}</style><aside class="sidebar"><div class="brand"><img class="adr-brand-logo" src="data:image/jpeg;base64,{LOGO_DATA}" alt="ADR Media Integrators"></div><nav aria-label="Dashboard"><label for="view-all">{icon("home")}<span>Overview</span></label><label for="view-power">{icon("power")}<span>Power</span></label><label for="view-network">{icon("network")}<span>Network</span></label><label for="view-av">{icon("av")}<span>AV/Automation</span></label><a href="#ask-adr" data-ask-shortcut>{icon("ask")}<span>Ask ADR</span></a><a href="#history">History</a><label for="view-connections">{icon("settings")}<span>Settings</span></label></nav><div class="sidebar-footer">ADR Media Integrators<br>Local service console · 0.28.2</div></aside><main id="overview"><header class="page-header"><div><h1>Service overview</h1></div></header>'
     report = pilot.current_service_report()
     notice = error or pilot.result
     if report and not error and pilot.result.startswith('Ready.'):
@@ -1204,7 +1204,7 @@ def page(pilot, confirmation=None, candidate=None, error=None):
     if pilot.araknis_options.get('allow_outlet_control') is not True:
         outlet_markup += '<p class="report-caption">Enable allow_outlet_control in Configuration to use outlet controls.</p>'
     network_diagnostics_markup, assistant_markup = diagnostic_panels(pilot.diagnostics, pilot.csrf)
-    text += grouped_cards(report, outlet_controls=outlet_markup, diagnostics_markup=network_diagnostics_markup, ups_status=pilot.usb_ups.status(), monitoring_markup=network_trial_panel(pilot.network_trial, pilot.csrf))
+    text += grouped_cards(report, outlet_controls=outlet_markup, diagnostics_markup=network_diagnostics_markup, ups_status=pilot.usb_ups.status(), monitoring_markup=network_trial_panel(pilot.network_trial, pilot.csrf), saved_green_history=[series for target in pilot.green_history.values() if isinstance(target, dict) for series in target.values() if isinstance(series, dict) and series.get('unit') in ('Mbps', 'Mbit/s')])
     text += assistant_markup
     text += monitoring_panel(pilot) + network_tools
     text += '</section>'
@@ -2042,7 +2042,7 @@ def main():
     server.pilot.native_events.start()
     server.pilot.usb_ups.start()
     server.pilot.start_monitoring()
-    print('ADR Service Agent 0.28.1 ready. Local monitoring uses configured intervals; no automatic power actions.')
+    print('ADR Service Agent 0.28.2 ready. Local monitoring uses configured intervals; no automatic power actions.')
     try:
         server.serve_forever()
     finally:

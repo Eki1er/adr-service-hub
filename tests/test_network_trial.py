@@ -170,6 +170,17 @@ class TrialTests(unittest.TestCase):
         self.trial.current['targets'][0][0]='<script>bad</script>'
         self.assertNotIn('<script>bad',panel(self.trial,'test'))
 
+    def test_individual_graphs_include_only_their_target(self):
+        self.trial.start()
+        self.sample()
+        for index, target in enumerate(self.trial.current['targets']):
+            markup = chart(self.trial.current,self.trial.samples,'loss_percent',target[0]+' packet loss','%',target_index=index)
+            self.assertEqual(markup.count('class="trend-line"'),1)
+            self.assertIn(target[0],markup)
+            for other_index, other in enumerate(self.trial.current['targets']):
+                if other_index != index:self.assertNotIn(other[0],markup)
+        self.assertEqual(panel(self.trial,'test').count('class="trial-chart"'),6)
+
     def test_chart_has_local_time_axis_and_exact_sample_details_without_dots(self):
         from datetime import datetime,timezone
         from dashboard import configure_site_timezone

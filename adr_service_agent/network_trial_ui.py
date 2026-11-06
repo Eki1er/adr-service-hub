@@ -34,9 +34,10 @@ def metrics(samples, index):
             f'{100*(sent-received)/sent:.1f}%' if sent else 'Unavailable', valid)
 
 
-def chart(current, samples, key, title, unit):
+def chart(current, samples, key, title, unit, target_index=None):
+    targets = [(i, target) for i, target in enumerate(current['targets']) if target_index is None or i == target_index]
     output = '<section class="trial-chart"><h4>' + title + '</h4>'
-    valid = [value(row.get(key)) for sample in samples for row in sample['rows']]
+    valid = [value(sample['rows'][i].get(key)) for sample in samples for i, _ in targets]
     valid = [v for v in valid if v is not None]
     if not valid:
         return output + '<p>Awaiting measured results.</p></section>'
@@ -58,7 +59,7 @@ def chart(current, samples, key, title, unit):
         output+=f'<path d="M{x:.2f} 200v7" class="chart-grid"/><text class="trial-time-tick" x="{x:.2f}" y="233" text-anchor="{anchor}">'+esc(label)+'</text>'
     output+='<text x="64" y="255" class="trial-time-zone">Time · '+esc(datetime.fromtimestamp(last,zone).strftime('%Z'))+'</text>'
     # Actual timestamps are used; unobserved periods and failures break paths.
-    for index, target in enumerate(current['targets']):
+    for index, target in targets:
         segments, active, previous = [], [], None
         for sample in samples:
             reading = value(sample['rows'][index].get(key))
@@ -87,12 +88,12 @@ def chart(current, samples, key, title, unit):
         half=min(8,INTERVAL/span*256)
         left,right=max(64,x-half),min(576,x+half)
         details=datetime.fromtimestamp(at,zone).strftime('%b %d · %I:%M:%S %p %Z')
-        for index,target in enumerate(current['targets']):
+        for index,target in targets:
             reading=value(sample['rows'][index].get(key))
             details+=' · '+str(target[0])+': '+(f'{reading:g} '+unit if reading is not None else 'Unavailable')
         output+=f'<rect x="{left:.3f}" y="40" width="{max(right-left,0.01):.3f}" height="160" class="trial-sample-hit" data-sample-detail="'+esc(details)+'"><title>'+esc(details)+'</title></rect>'
     output += '</svg><div class="trend-legend">'
-    for index, target in enumerate(current['targets']):
+    for index, target in targets:
         output += '<span class="trend-color-'+str(index)+'"><i></i>'+esc(target[0])+'</span>'
     output += '</div><p class="trial-selected-sample" data-trial-detail data-trial-session="'+esc(current.get('id',''))+'" role="status">Tap the graph to enlarge it, zoom, and inspect exact sample times and readings.</p><p class="report-caption">'+esc(display_time(stamp(first)))+' — '+esc(display_time(stamp(last)))+' · '+unit+'</p></section>'
     return output
@@ -126,8 +127,9 @@ def panel(trial, csrf):
             latest = value(samples[-1]['rows'][index].get('latency_ms')) if samples else None
             output += '<tr><th>'+esc(target[0])+'<small>'+esc(target[1])+'</small></th><td>'+(f'{latest:g} ms' if latest is not None else 'Unavailable')+'</td><td>'+loss+'</td><td>'+base_latency+' / '+base_loss+'</td><td>'+str(count)+' / '+str(len(samples))+'</td></tr>'
         output += '</tbody></table></div>'
-        output += chart(current, samples, 'latency_ms', 'Ping latency history', 'ms')
-        output += chart(current, samples, 'loss_percent', 'Sampled packet-loss history', '%')
+        for index, target in enumerate(current['targets']):
+            output += chart(current, samples, 'latency_ms', esc(target[0])+' · Latency', 'ms', target_index=index)
+            output += chart(current, samples, 'loss_percent', esc(target[0])+' · Packet loss', '%', target_index=index)
         output += '<p>Latest sample: '+(esc(display_time(stamp(samples[-1]['time']))) if samples else 'Awaiting first sample')+'. Missing measurements remain gaps. Loss is based only on confirmed packet counts.</p>'
         output += '<form method="post" action="network-trial-report"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><button>Download monitoring history</button></form>'
     output += '<p class="report-caption">History: 7 days. Stop keeps recorded results. Updating or restarting the app stops monitoring.</p>'

@@ -1,4 +1,10 @@
-## Current release: 0.28.1
+## Current release: 0.28.2
+
+Gateway, Cloudflare, and Google each have separate latency and packet-loss graphs,
+with independent enlargement and sample inspection. Saved internet speed graphs
+appear immediately after app updates or restarts, before new checks run.
+
+## Previous release: 0.28.1
 
 Rename Connections to Settings throughout the dashboard. Clean up navigation
 icons and align their size, spacing, and mobile labels. Power history shows only
