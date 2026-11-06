@@ -17,10 +17,10 @@
   });
   const storageKey = 'adr-view:' + location.pathname;
   const main = document.querySelector('main');
-  const views = ['all', 'power', 'network', 'av'];
+  const views = ['all', 'power', 'network', 'av', 'connections'];
   try {
     const saved = sessionStorage.getItem(storageKey);
-    if (views.includes(saved)) {
+    if (views.includes(saved) && !document.getElementById('view-connections')?.defaultChecked) {
       const selected = document.getElementById('view-' + saved);
       if (selected) selected.checked = true;
     }
@@ -78,6 +78,7 @@
     const detail=event.target.closest('.trial-chart')?.querySelector('[data-trial-detail]');
     if(detail)detail.textContent=points[index].dataset.sampleDetail;
   });
+  if(document.getElementById('view-connections')?.checked)summaryFilter='';
   if(summaryFilter){const all=document.getElementById('view-all');if(all)all.checked=true;}
   applySummaryFilter();
 
@@ -201,8 +202,50 @@
   // consent, selected category and open tiles. GETs never trigger checks.
   let diagnosticSubmitting=false;
   const diag = id => document.getElementById(id);
+  const deviceCache = new Map();
+  const unknownDeviceValue = value => ['', 'unknown', 'unverified', 'unavailable'].includes(String(value ?? '').trim().toLowerCase());
+  const macText = value => String(value ?? '').replace(/[^0-9a-f]/gi, '').toLowerCase();
+  function deviceSelection(rows, query, sort) {
+    query = String(query || '').trim().toLowerCase();
+    const compact = macText(query), macQuery = /^[0-9a-f: .-]+$/i.test(query) && compact.length >= 4;
+    const selected = rows.filter(row => !query || row.slice(0,5).some(value => String(value ?? '').toLowerCase().includes(query)) || (macQuery && !unknownDeviceValue(row[3]) && macText(row[3]).includes(compact)));
+    const ip = value => { const parts=String(value).split('.'); return parts.length===4 && parts.every(p=>/^\d{1,3}$/.test(p)&&Number(p)<=255) ? parts.reduce((n,p)=>n*256+Number(p),0) : Infinity; };
+    const column = {manufacturer:0,hostname:2,mac:3}[sort];
+    return selected.slice().sort((a,b) => {
+      if (sort === 'ip' || column === undefined) return ip(a[1])-ip(b[1]);
+      const missing = Number(unknownDeviceValue(a[column]))-Number(unknownDeviceValue(b[column]));
+      if (missing) return missing;
+      const left=sort==='mac'?macText(a[column]):String(a[column]??'');
+      const right=sort==='mac'?macText(b[column]):String(b[column]??'');
+      return left.localeCompare(right,'en',{sensitivity:'base',numeric:true}) || ip(a[1])-ip(b[1]);
+    });
+  }
+  function redrawDeviceLists() {
+    for (const [id,rows] of deviceCache) diagnosticRows(id,rows);
+  }
+  window.ADRDeviceList = {
+    select:deviceSelection,
+    set(query,sort) {
+      const search=diag('diag-device-search'), order=diag('diag-device-sort');
+      if(search)search.value=query;if(order)order.value=sort;
+      redrawDeviceLists();
+    }
+  };
+  for (const name of ['input','change']) document.addEventListener(name,event=>{
+    if (['diag-device-search','diag-device-sort'].includes(event.target.id)) redrawDeviceLists();
+  });
   function diagnosticRows(id,rows){
     const body=diag(id);if(!body)return;
+    if (id==='diag-devices' || id==='diag-observed') {
+      deviceCache.set(id,rows);
+      const total=rows.length;
+      rows=deviceSelection(rows,diag('diag-device-search')?.value,diag('diag-device-sort')?.value || 'ip');
+      if(id==='diag-devices') {
+        const count=diag('diag-device-count'),empty=diag('diag-device-empty');
+        if(count)count.textContent=rows.length+' of '+total+' devices';
+        if(empty)empty.hidden=rows.length>0;
+      }
+    }
     const serialized=JSON.stringify(rows);if(body.dataset.rows===serialized)return;
     const fragment=document.createDocumentFragment();
     const labels=id==='diag-devices'?['Manufacturer','IP address','Hostname','MAC address','Device type','Identity source','Web interface']:[];
@@ -280,7 +323,7 @@
       diag('adr-answer').textContent=state.answer;
       diagnosticRows('diag-targets',(result.targets||[]).map(t=>[t.ip,t.ping.status==='responded'?'Reply':t.ping.status==='no_reply'?'No reply':'Unverified',t.ping.average_ms==null?'Unverified':t.ping.average_ms+' ms']));
       const discovery=state.discovery||(result.kind==='discovery'?result:{});
-      diag('diag-discovery').textContent=discovery.kind==='discovery'?discovery.responding.length+' replies / '+discovery.tested+' tested · '+localDate(discovery.checked_at)+'. Nonresponders remain unverified. '+(discovery.limitations||[]).join(' '):'';
+      diag('diag-discovery').textContent=discovery.kind==='discovery'?discovery.responding.length+' replies / '+discovery.tested+' tested · '+localDate(discovery.checked_at)+'':'';
       diagnosticRows('diag-devices',(discovery.devices||[]).map(d=>[d.manufacturer||'Unknown',d.ip,d.hostname||'Unknown',d.mac||'Unknown',d.device_type||'Unknown',d.identity_source||'Unknown',{ip:d.ip,web:d.services||[]} ]));
       diagnosticRows('diag-observed',(state.observed||[]).map(d=>[d.manufacturer||'Unknown',d.ip,d.hostname||'Unknown',d.mac||'Unknown',localDate(d.identity_checked_at),localDate(d.last_seen)]));
       document.querySelectorAll('button[data-diagnostic]').forEach(b=>{b.disabled=state.blocked||state.busy||diagnosticSubmitting||Boolean(window.ADRVoice?.busy())||(b.dataset.diagnostic==='ask'?!state.cloud_enabled:!state.enabled);});
@@ -320,3 +363,175 @@
 })();
 
 
+
+
+
+// Chart inspection is entirely local. Never fetch data or submit device actions.
+(() => {
+  const chartSelector = 'svg.trend-chart, svg.history-chart, .gauge svg, table';
+  let viewer = null;
+  function openChart(source) {
+    if (viewer) return;
+    const isTable = source.tagName.toLowerCase() === 'table';
+    const deviceTable = isTable && source.querySelector('#diag-devices,#diag-observed');
+    const card = source.closest('.trial-chart, .trend-card, .sense-series, .gauge, section, article, details');
+    const dialog = document.createElement('dialog');
+    dialog.className = 'chart-viewer';
+    dialog.setAttribute('aria-labelledby', 'chart-viewer-title');
+    dialog.innerHTML = '<header><h2 id="chart-viewer-title"></h2><button type="button" data-chart-close aria-label="Close enlarged graph">Close</button></header><div class="chart-viewer-tools"><button type="button" data-chart-out aria-label="Zoom out">−</button><output aria-live="polite">100%</output><button type="button" data-chart-in aria-label="Zoom in">+</button><button type="button" data-chart-reset>Reset zoom</button></div><p class="chart-viewer-help">Pinch or use + / − to zoom. Drag to pan. Tap for a recorded reading; use arrow keys to step through samples.</p><div class="chart-viewer-legend"></div><div class="chart-viewer-viewport" tabindex="0" aria-label="Enlarged graph"><div class="chart-viewer-canvas"></div></div><p class="chart-viewer-detail" role="status">Showing the recorded graph at the time it was opened.</p>';
+    dialog.querySelector('h2').textContent = isTable ? (deviceTable ? 'Devices' : source.caption?.textContent || card?.querySelector('h2,h3,h4,summary')?.textContent || 'Table') : (card?.querySelector('h4')?.textContent || source.getAttribute('aria-label') || 'History');
+    dialog.querySelector('[data-chart-close]').setAttribute('aria-label','Close enlarged view');
+    dialog.querySelector('.chart-viewer-help').textContent='Pinch to zoom · Drag to pan';
+    const legend = source.parentElement.querySelector('.trend-legend') || card?.querySelector('.trend-legend');
+    if (legend) dialog.querySelector('.chart-viewer-legend').append(legend.cloneNode(true));
+    const svg = source.cloneNode(true);
+    svg.removeAttribute('tabindex');
+    svg.removeAttribute('data-trial-chart');
+    svg.removeAttribute('aria-haspopup');
+    svg.removeAttribute('id');
+    svg.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+    svg.querySelectorAll('button,input,select,textarea').forEach(node=>node.disabled=true);
+    if(!isTable)svg.setAttribute('role', 'img');
+    else svg.classList.add('viewer-table');
+    const viewport = dialog.querySelector('.chart-viewer-viewport');
+    const canvas = dialog.querySelector('.chart-viewer-canvas');
+    const detail = dialog.querySelector('.chart-viewer-detail');
+    canvas.append(svg);
+    dialog.addEventListener('submit',event=>event.preventDefault());
+    if(isTable && source.querySelector('#diag-devices,#diag-observed') && window.ADRDeviceList) {
+      const original=document.querySelector('.device-list-controls');
+      if(original){
+        const controls=original.cloneNode(true);
+        controls.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+        const search=controls.querySelector('input[type="search"]'),order=controls.querySelector('select');
+        search.value=original.querySelector('input[type="search"]').value;
+        order.value=original.querySelector('select').value;
+        function filter(){
+          window.ADRDeviceList.set(search.value,order.value);
+          const copy=source.cloneNode(true);
+          copy.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+          svg.replaceChildren(...copy.childNodes);
+        }
+        search.addEventListener('input',filter);order.addEventListener('change',filter);
+        dialog.querySelector('.chart-viewer-legend').before(controls);
+      }
+    }
+    document.body.append(dialog);
+    viewer = dialog;
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialog.addEventListener('close', () => {
+      document.body.style.overflow = oldOverflow;
+      viewer = null;
+      dialog.remove();
+      if (source.isConnected) source.focus({preventScroll:true});
+    });
+    dialog.showModal();
+    const box = isTable ? {width:700,height:280} : svg.viewBox.baseVal;
+    if(isTable)detail.hidden=true;
+    let scale = 1, baseWidth = Math.max(viewport.clientWidth, 320), selected = -1;
+    let moved = false, pointers = new Map(), gesture = null;
+    function zoom(next, cx = viewport.clientWidth / 2, cy = viewport.clientHeight / 2) {
+      next = Math.max(1, Math.min(8, next));
+      const ratio = next / scale;
+      const left = (viewport.scrollLeft + cx) * ratio - cx;
+      const top = (viewport.scrollTop + cy) * ratio - cy;
+      scale = next;
+      svg.style.width = (isTable?Math.max(baseWidth,700):baseWidth) * scale + 'px';
+      svg.style.height = isTable ? 'auto' : baseWidth * scale * box.height / box.width + 'px';
+      if(isTable)svg.style.fontSize=13*scale+'px';
+      viewport.scrollLeft = left; viewport.scrollTop = top;
+      dialog.querySelector('output').textContent = Math.round(scale * 100) + '%';
+      dialog.querySelector('[data-chart-out]').disabled = scale === 1;
+      dialog.querySelector('[data-chart-in]').disabled = scale === 8;
+    }
+    zoom(1);
+    const resize = () => { baseWidth = Math.max(viewport.clientWidth, 320); zoom(scale); };
+    addEventListener('resize', resize, {passive:true});
+    dialog.addEventListener('close', () => removeEventListener('resize', resize));
+    const samples = [...svg.querySelectorAll('[data-sample-detail]')].filter(p => !p.closest('[style*="display: none"], [hidden]')).sort((a,b) => Number(a.getAttribute('x'))-Number(b.getAttribute('x')));
+    function select(index) {
+      if (!samples.length) return;
+      selected = Math.max(0, Math.min(samples.length - 1, index));
+      const sample = samples[selected];
+      detail.textContent = sample.dataset.sampleDetail;
+      svg.querySelector('.chart-selection')?.remove();
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      const x = Number(sample.getAttribute('x')) + Number(sample.getAttribute('width')) / 2;
+      line.setAttribute('d', `M${x} 18V${box.height - 30}`);
+      line.setAttribute('class', 'chart-selection');
+      svg.append(line);
+    }
+    dialog.querySelector('[data-chart-close]').onclick = () => dialog.close();
+    dialog.querySelector('[data-chart-in]').onclick = () => zoom(scale * 1.5);
+    dialog.querySelector('[data-chart-out]').onclick = () => zoom(scale / 1.5);
+    dialog.querySelector('[data-chart-reset]').onclick = () => { zoom(1); viewport.scrollLeft = viewport.scrollTop = 0; };
+    viewport.addEventListener('click', event => {
+      if (moved || isTable) return;
+      const hit = event.target.closest('[data-sample-detail]');
+      if (hit && samples.includes(hit)) { select(samples.indexOf(hit)); return; }
+      const rect = svg.getBoundingClientRect();
+      const x = box.x + (event.clientX - rect.left) / rect.width * box.width;
+      let nearest = -1, distance = Infinity;
+      samples.forEach((p, i) => {
+        const dx = Math.abs(Number(p.getAttribute('x')) + Number(p.getAttribute('width')) / 2 - x);
+        if (dx < distance) { distance = dx; nearest = i; }
+      });
+      if (nearest >= 0) select(nearest);
+    });
+    viewport.addEventListener('keydown', event => {
+      if (!isTable && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault(); select(selected < 0 ? 0 : selected + (event.key === 'ArrowRight' ? 1 : -1));
+        samples[selected]?.scrollIntoView({block:'nearest', inline:'nearest'});
+      }
+      if (event.key === '+' || event.key === '=') { event.preventDefault(); zoom(scale * 1.5); }
+      if (event.key === '-') { event.preventDefault(); zoom(scale / 1.5); }
+    });
+    function beginGesture() {
+      const points = [...pointers.values()];
+      gesture = {points, left:viewport.scrollLeft, top:viewport.scrollTop, scale,
+        distance:points.length === 2 ? Math.hypot(points[1].x-points[0].x, points[1].y-points[0].y) : 0};
+    }
+    viewport.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      if (!pointers.size) moved = false;
+      pointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
+      if (pointers.size > 1) moved = true;
+      // Keep sample hit targets for taps; capture only after movement.
+      beginGesture();
+    });
+    viewport.addEventListener('pointermove', event => {
+      if (!pointers.has(event.pointerId)) return;
+      pointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
+      const points = [...pointers.values()];
+      if (points.length === 2 && gesture.distance > 0) {
+        moved = true; viewport.setPointerCapture(event.pointerId);
+        const rect = viewport.getBoundingClientRect();
+        zoom(gesture.scale * Math.hypot(points[1].x-points[0].x, points[1].y-points[0].y) / gesture.distance,
+          (points[0].x+points[1].x)/2-rect.left, (points[0].y+points[1].y)/2-rect.top);
+      } else if (points.length === 1 && gesture.points.length === 1) {
+        const dx = points[0].x - gesture.points[0].x, dy = points[0].y - gesture.points[0].y;
+        if (Math.hypot(dx,dy) > 5) moved = true;
+        if (moved) { viewport.setPointerCapture(event.pointerId); viewport.scrollLeft = gesture.left-dx; viewport.scrollTop = gesture.top-dy; }
+      }
+    });
+    for (const name of ['pointerup','pointercancel','lostpointercapture']) viewport.addEventListener(name, event => {
+      pointers.delete(event.pointerId); beginGesture();
+    });
+    viewport.addEventListener('wheel', event => {
+      if (!event.ctrlKey) return;
+      event.preventDefault(); const rect = viewport.getBoundingClientRect();
+      zoom(scale * Math.exp(-event.deltaY * .01), event.clientX-rect.left, event.clientY-rect.top);
+    }, {passive:false});
+    dialog.querySelector('[data-chart-close]').focus();
+  }
+  document.addEventListener('click', event => {
+    const source = event.target.closest(chartSelector);
+    if (!source || source.closest('.chart-viewer') || event.target.closest('a,button,input,select,textarea,label')) return;
+    event.preventDefault(); event.stopImmediatePropagation(); openChart(source);
+  }, true);
+  document.addEventListener('keydown', event => {
+    if (!event.target.matches(chartSelector) || !['Enter',' '].includes(event.key)) return;
+    event.preventDefault(); openChart(event.target);
+  });
+})();

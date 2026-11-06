@@ -45,7 +45,7 @@ def chart(current, samples, key, title, unit):
     ceiling = 100 if unit == '%' else max(5, math.ceil(max(valid)/5)*5)
     try:zone=ZoneInfo(site_timezone_name())
     except (ZoneInfoNotFoundError,ValueError):zone=ZoneInfo('UTC')
-    output += '<svg class="trend-chart" viewBox="0 0 600 260" role="group" tabindex="0" data-trial-chart aria-label="'+title+'; use left and right arrows for sample details"><title>'+title+'</title>'
+    output += '<svg class="trend-chart" tabindex="0" aria-haspopup="dialog" viewBox="0 0 600 260" role="group" data-trial-chart aria-label="'+title+'; use left and right arrows for sample details"><title>'+title+'</title>'
     for index in range(5):
         yy = 40 + index*40
         output += f'<path d="M64 {yy}H576" class="chart-grid"/><text x="55" y="{yy+4}" text-anchor="end">{ceiling*(4-index)/4:g}</text>'
@@ -94,7 +94,7 @@ def chart(current, samples, key, title, unit):
     output += '</svg><div class="trend-legend">'
     for index, target in enumerate(current['targets']):
         output += '<span class="trend-color-'+str(index)+'"><i></i>'+esc(target[0])+'</span>'
-    output += '</div><p class="trial-selected-sample" data-trial-detail data-trial-session="'+esc(current.get('id',''))+'" role="status">Tap the graph for the exact sample time and readings.</p><p class="report-caption">'+esc(display_time(stamp(first)))+' — '+esc(display_time(stamp(last)))+' · '+unit+'</p></section>'
+    output += '</div><p class="trial-selected-sample" data-trial-detail data-trial-session="'+esc(current.get('id',''))+'" role="status">Tap the graph to enlarge it, zoom, and inspect exact sample times and readings.</p><p class="report-caption">'+esc(display_time(stamp(first)))+' — '+esc(display_time(stamp(last)))+' · '+unit+'</p></section>'
     return output
 
 
@@ -104,10 +104,10 @@ def panel(trial, csrf):
     running = bool(current and current.get('state') == 'running')
     output = '<article class="system-card network-trial-card" id="network-monitoring"><details class="system-tile"><summary class="tile-summary"><div class="tile-icon-row"><span class="system-icon">'+icon('network')+'</span></div><h3>Network Monitoring</h3><span class="badge">'
     label = 'Baseline' if running and data['now'] < current['started']+BASELINE else 'Running' if running else str(current.get('state', 'Ready')).capitalize() if current else 'Ready'
-    output += esc(label)+'</span><p class="tile-value">24-hour latency and packet-loss trial</p><div class="tile-footer">Open monitoring</div></summary><div class="tile-body">'
+    output += esc(label)+'</span><p class="tile-value">Latency &amp; packet-loss monitoring</p><div class="tile-footer">Open monitoring</div></summary><div class="tile-body">'
     output += '<p>Five pings per target every minute from the Green. The first five minutes form the baseline. Stops automatically after 24 hours.</p>'
     output += '<div class="toolbar">'
-    for action, title, disabled in (('network-trial-start', 'Start 24-hour trial', running or data['busy'] or bool(data['error'])), ('network-trial-stop', 'Stop trial', not running)):
+    for action, title, disabled in (('network-trial-start', 'Start monitoring', running or data['busy'] or bool(data['error'])), ('network-trial-stop', 'Stop monitoring', not running)):
         output += '<form method="post" action="'+action+'"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><button'+(' disabled' if disabled else '')+'>'+title+'</button></form>'
     output += '</div>'
     if data['error']:
@@ -118,7 +118,7 @@ def panel(trial, csrf):
             output += '<p>Ended '+esc(display_time(stamp(current['ended'])))+'</p>'
         if running:
             output += '<p role="status">'+str(max(0, math.ceil((current['deadline']-data['now'])/60)))+' minutes remaining · '+str(len(samples))+' recorded samples</p>'
-        output += '<div class="trial-table"><table><thead><tr><th>Target</th><th>Latest latency</th><th>Trial loss</th><th>Baseline latency / loss</th><th>Measured samples</th></tr></thead><tbody>'
+        output += '<div class="trial-table"><table><thead><tr><th>Target</th><th>Latest latency</th><th>Packet loss</th><th>Baseline latency / loss</th><th>Measured samples</th></tr></thead><tbody>'
         baseline = [s for s in samples if s.get('baseline') is True]
         for index, target in enumerate(current['targets']):
             _, loss, count = metrics(samples, index)
@@ -130,6 +130,7 @@ def panel(trial, csrf):
         output += chart(current, samples, 'loss_percent', 'Sampled packet-loss history', '%')
         output += '<p>Latest sample: '+(esc(display_time(stamp(samples[-1]['time']))) if samples else 'Awaiting first sample')+'. Missing measurements remain gaps. Loss is based only on confirmed packet counts.</p>'
         output += '<form method="post" action="network-trial-report"><input type="hidden" name="csrf" value="'+esc(csrf)+'"><button>Download monitoring history</button></form>'
-    output += '<p class="report-caption">History is retained for seven days, up to 10,080 samples and 32 trials. Charts show the latest trial; the download includes all retained trials. Stop keeps history. An app restart ends the trial; start a new trial to collect again. A ping batch already in progress may take up to nine seconds to finish.</p>'
-    output += '<p class="report-caption">ADR speed tests are paused during the trial and resume on the existing schedule afterward. System checks continue. Other apps can still run their own tests. ICMP can be filtered or deprioritized; missed replies do not prove an ISP fault. These are endpoint samples, without per-hop route tracing.</p>'
+    output += '<p class="report-caption">History: 7 days. Stop keeps recorded results. Updating or restarting the app stops monitoring.</p>'
+    output += '<p class="report-caption">Speed tests pause during monitoring. System checks continue.</p>'
     return output+'</div></details></article>'
+

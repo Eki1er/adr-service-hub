@@ -1,3 +1,15 @@
+## 0.28.0
+
+- Search devices by manufacturer, hostname, MAC, IP, or device type. Sort by numeric IP, manufacturer, hostname, or MAC; keep unknown identities last.
+- Make mobile device cards smaller while retaining every field and web link.
+- Tap tables, history graphs, and gauges to enlarge them. Zoom, pan, inspect recorded samples, and close the viewer to return. Search and sort device tables in the enlarged view.
+- Give Connections its own navigation view and keep Ask ADR on Overview only.
+- Replace the UPS observation graph with a compact status card and power-event list. Collapse routine monitoring activity and retain separate reported/received times.
+- Show Download and Upload values for a single speed test; use a timeline for multiple tests. Simplify headings and period controls.
+- Remove routine explanatory blocks from diagnostics and discovery. Use monitoring instead of trial in visible labels.
+- Keep the existing 24-hour ping limit and collection behavior. Updating restarts the app and ends active monitoring; downloaded results remain available.
+- Validation: 399 Python tests and JavaScript filtering, navigation, history-control, and unified UI checks passed. Mobile visual verification of the final layout and table viewer remains pending.
+
 ## 0.27.1
 
 - Count Bluesound audio zones by media-player entity rather than all readings or hardware devices. Multiple zones sharing one device or integration remain separate.
@@ -456,3 +468,4 @@
 - Initial experimental WattBox connector with ingress UI, SSH identity pinning,
   outlet inventory, confirmed single-outlet RESET, cooldown and power verification.
 - Hardware build and live integration testing remain pending.
+

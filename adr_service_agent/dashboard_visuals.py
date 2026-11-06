@@ -28,7 +28,7 @@ def gauge(label, value):
     text = f'{value:g}%'
     angle=math.pi*(1-value/100)
     x,y=80+math.cos(angle)*53,88-math.sin(angle)*53
-    return ('<div class="gauge"><svg viewBox="0 0 160 145" role="img" aria-label="' + esc(label + ': ' + text) + '">'
+    return ('<div class="gauge"><svg tabindex="0" aria-haspopup="dialog" viewBox="0 0 160 145" role="img" aria-label="' + esc(label + ': ' + text) + '">'
         '<title>' + esc(label + ': ' + text) + '</title><path d="M18 88 A62 62 0 0 1 142 88" class="gauge-track"/>'
         '<path d="M18 88 A62 62 0 0 1 142 88" class="gauge-fill" pathLength="100" stroke-dasharray="' + str(value) + ' 100"/>'
         f'<path d="M80 88L{x:.2f} {y:.2f}" class="gauge-needle"/>'
@@ -165,7 +165,7 @@ def history_chart(series):
             active.append((x, y))
         previous = stamp
     if active: segments.append(active)
-    output += '<svg class="history-chart" viewBox="0 0 308 136" role="img" aria-label="' + title + ' history, ' + f'{low:g} to {high:g} ' + unit + '"><title>' + title + ' history</title>'
+    output += '<svg class="history-chart" tabindex="0" aria-haspopup="dialog" viewBox="0 0 308 136" role="img" aria-label="' + title + ' history, ' + f'{low:g} to {high:g} ' + unit + '"><title>' + title + ' history</title>'
     output += '<path d="M38 18V102H290" class="chart-axis"/>'
     if series.get('observation_ticks'):
         output += '<path d="M38 23H288M38 95H288" class="state-unknown-rail"/>'
@@ -191,6 +191,11 @@ def history_chart(series):
     last = datetime.fromtimestamp(xmax, zone)
     format_time = '%m/%d %H:%M' if first.date() != last.date() else '%H:%M'
     start, end = first.strftime(format_time), last.strftime(format_time)
+    for at, reading in parsed:
+        x = 38 + (at-xmin) / max(xmax-xmin, 1) * 250
+        measured = state_labels.get(str(int(reading)), str(reading)) if state_labels and reading is not None else (f'{reading:g} '+str(series.get('unit', '')) if reading is not None else 'Unavailable')
+        caption = datetime.fromtimestamp(at, zone).strftime('%b %d · %I:%M:%S %p %Z') + ' · ' + str(measured)
+        output += f'<rect x="{x-2:.3f}" y="18" width="4" height="84" class="trend-hit" data-sample-detail="' + esc(caption) + '"><title>' + esc(caption) + '</title></rect>'
     output += '<text x="38" y="122">' + start + '</text><text x="288" y="122" text-anchor="end">' + end + '</text></svg>'
     summary = (str(len(valid)) + ' reported observations') if series.get('observation_ticks') else ('Range ' + f'{low:g}–{high:g} ' + unit + ' · ' + str(len(valid)) + ' samples')
     output += '<small>' + summary + ' · ' + last.strftime('%Z') + (' · partial history' if series.get('truncated') else '') + '</small></div>'
@@ -218,7 +223,7 @@ def trend_chart(series_list, title, unit, timeline=False):
         rows.append((label,points))
     valid=[(t,v) for _,points in rows for t,v in points if v is not None]
     default='day' if timeline else 'week'
-    output='<section class="trend-card'+(' speed-timeline' if timeline else '')+'" data-trend-card="'+esc(title)+'"><header><h4>'+esc(title)+'</h4><div class="trend-controls">'+('<select data-trend-series hidden aria-label="Both speed series">' if timeline else '<label>Show <select data-trend-series>')+'<option value="all">All readings</option>'
+    output='<section class="trend-card'+(' speed-timeline' if timeline else '')+'" data-trend-card="'+esc(title)+'"><header><h4>'+esc('Internet speed' if timeline else title)+'</h4>'+('<small class="trend-source">'+esc(title.removesuffix(' Internet test history'))+'</small>' if timeline else '')+'<div class="trend-controls">'+('<select data-trend-series hidden aria-label="Both speed series">' if timeline else '<label>Show <select data-trend-series>')+'<option value="all">All readings</option>'
     for i,(label,_) in enumerate(rows):output+='<option value="'+str(i)+'">'+esc(label)+'</option>'
     output+='</select>'+('' if timeline else '</label>')+'<label>Period <select data-trend-range><option value="week">Week</option><option value="day"'+(' selected' if timeline else '')+'>24 hours</option><option value="all">All recorded</option></select></label></div></header>'
     if not valid:return output+'<p class="empty-state">Awaiting recorded '+esc(title.lower())+' results.</p></section>'
@@ -228,9 +233,23 @@ def trend_chart(series_list, title, unit, timeline=False):
         maximum=max([v for _,v in selected]+[1]); ceiling=math.ceil(maximum/5)*5 if maximum<=20 else math.ceil(maximum/100)*100
         def x(t):return 320 if last==start else 64+(t-start)/(last-start)*512
         def y(v):return 200-v/ceiling*160
-        output+='<div data-trend-window="'+key+'"'+(' hidden' if key!=default else '')+'><div class="trend-legend">'
+        output+='<div data-trend-window="'+key+'"'+(' hidden' if key!=default else '')+'>'
+        window_rows = [(label, [(t,v) for t,v in points if start<=t<=last and v is not None]) for label,points in rows]
+        if timeline and all(len(points)<=1 for _,points in window_rows):
+            output += '<div class="speed-latest">'
+            for i,(label,points) in enumerate(window_rows):
+                output += '<div class="speed-reading trend-color-'+str(i%4)+'"><span>'+esc(label)+'</span>'
+                if points:
+                    at,reading = points[-1]
+                    output += '<strong>'+f'{reading:g}'+'<small> Mbps</small></strong><time>'+esc(datetime.fromtimestamp(at,zone).strftime('%b %d · %I:%M %p %Z'))+'</time>'
+                else:
+                    output += '<strong class="speed-missing">Unavailable</strong>'
+                output += '</div>'
+            output += '</div><p class="speed-hint">More recorded tests will add a timeline.</p></div>'
+            continue
+        output+='<div class="trend-legend">'
         for i,(label,_) in enumerate(rows):output+='<span data-trend-item="'+str(i)+'" class="trend-color-'+str(i%4)+'"><i></i>'+esc(label)+'</span>'
-        output+='</div><svg class="trend-chart" viewBox="0 0 600 280" role="img" aria-label="'+esc(title)+'"><title>'+esc(title)+'</title><text x="64" y="22">'+esc(unit)+'</text>'
+        output+='</div><svg class="trend-chart" tabindex="0" aria-haspopup="dialog" viewBox="0 0 600 280" role="img" aria-label="'+esc(title)+'"><title>'+esc(title)+'</title><text x="64" y="22">'+esc(unit)+'</text>'
         for i in range(6):
             yy=40+i*32;value=ceiling*(5-i)/5
             output+=f'<path d="M64 {yy}H576" class="chart-grid"/><text x="55" y="{yy+4}" text-anchor="end">{value:g}</text>'
@@ -267,10 +286,11 @@ def trend_chart(series_list, title, unit, timeline=False):
                         output+=f'<path d="M{x(t)-5:.2f},{y(v):.2f}h10" class="trend-isolated"/>'
             output+='</g>'
         output+='</svg><small>'+esc(unit)+' · '+str(len(selected))+' recorded readings · '+esc(datetime.fromtimestamp(last,zone).strftime('%Z'))+'</small></div>'
-    output+='<p class="trial-selected-sample" data-trial-detail data-trial-session="'+esc(title)+'" role="status">Tap a line for its measured value and test time.</p>'
-    if timeline and any(sum(v is not None for _,v in points)<2 for _,points in rows):
-        output+='<p class="report-caption">Each line needs at least two recorded tests. A single test is shown as a short bar at its measurement time.</p>'
-    output+='<p class="report-caption">Periods end at the latest recorded reading: '+esc(datetime.fromtimestamp(last,zone).strftime('%b %d · %I:%M %p %Z'))+'. Lines show trends between tests; long gaps and unavailable readings remain breaks.</p></section>'
+    output+='<p class="trial-selected-sample" data-trial-detail data-trial-session="'+esc(title)+'" role="status">Tap the graph to enlarge it, zoom, and inspect measured values and test times.</p>'
+    if timeline:
+        output+='<p class="report-caption">Latest reading · '+esc(datetime.fromtimestamp(last,zone).strftime('%b %d · %I:%M %p %Z'))+'</p></section>'
+    else:
+        output+='<p class="report-caption">Periods end at the latest recorded reading: '+esc(datetime.fromtimestamp(last,zone).strftime('%b %d · %I:%M %p %Z'))+'. Lines show trends between tests; long gaps and unavailable readings remain breaks.</p></section>'
     return output
 
 
@@ -381,5 +401,6 @@ def network_panels(checks, include_internet=True, include_access_points=True):
         for ap in aps[:32]:
             output += '<div class="ap-card"><h4 title="' + esc(ap.get('name', 'Access point')) + '">' + esc(ap.get('name', 'Access point')) + '</h4><small>' + esc(ap.get('model', '')) + '</small><p>Status: <strong>Unverified</strong></p><p>Connected devices: <strong>Unverified</strong></p></div>'
     return output + '</div></div>'
+
 
 
